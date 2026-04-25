@@ -1,0 +1,20 @@
+# Gentleman Guardian Angel Configuration
+# https://github.com/Gentleman-Programming/gentleman-guardian-angel
+
+# AI Provider
+PROVIDER="claude"
+
+# File patterns to review (Python project)
+FILE_PATTERNS="*.py,*.html,*.css,*.js,*.yml,*.toml,*.sh"
+
+# Exclude patterns (tests, vendored, generated)
+EXCLUDE_PATTERNS="*.pyc,__pycache__,.venv,*.egg-info,uv.lock,htmx.min.js,.coverage"
+
+# Rules file for code review
+RULES_FILE="AGENTS.md"
+
+# Strict mode: reject if AI response is ambiguous
+STRICT_MODE="true"
+
+# Timeout for AI response
+TIMEOUT="300"

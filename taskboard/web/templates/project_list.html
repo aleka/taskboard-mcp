@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+
+{% block title %}Projects — Taskboard{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Projects</h1>
+    <a href="/" class="btn btn-secondary btn-sm">&larr; Dashboard</a>
+</div>
+
+{% if projects %}
+<div class="project-grid">
+    {% for project in projects %}
+    <a href="/projects/{{ project.slug }}" class="card project-card">
+        <h3>{{ project.display_name or project.name }}</h3>
+        <p class="project-meta">{{ project.slug }} &middot; {{ project.origin }}</p>
+        <div class="project-stats">
+            <span class="stat">{{ project.metrics.total_tasks }} tasks</span>
+            <span class="stat stat-success">{{ project.metrics.completed }} done</span>
+            <span class="stat stat-pending">{{ project.metrics.pending }} pending</span>
+            <span class="stat stat-rate">{{ project.metrics.completion_rate }}%</span>
+        </div>
+    </a>
+    {% endfor %}
+</div>
+{% else %}
+<p class="empty-state">No projects found.</p>
+{% endif %}
+{% endblock %}

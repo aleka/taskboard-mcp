@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Taskboard{% endblock %}</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body hx-on::response-error="alert('Server error — please try again.')">
+    <nav class="main-nav">
+        <a href="/" class="nav-brand">Taskboard</a>
+        <div class="nav-links">
+            <a href="/">Dashboard</a>
+            <a href="/projects">Projects</a>
+            <a href="/timeline">Timeline</a>
+            <a href="/reports">Reports</a>
+        </div>
+    </nav>
+
+    <main class="content">
+        {% block content %}{% endblock %}
+    </main>
+
+    <footer class="main-footer">
+        <p>Taskboard &mdash; Personal Task Tracker</p>
+    </footer>
+
+    <script src="/static/js/htmx.min.js"></script>
+</body>
+</html>

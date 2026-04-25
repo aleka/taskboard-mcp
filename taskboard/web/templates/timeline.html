@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+
+{% block title %}Timeline — Taskboard{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Timeline</h1>
+</div>
+
+<!-- View Toggle + Project Filter -->
+<section class="filter-bar">
+    <div class="view-toggle">
+        <button
+            class="btn {% if current_view == 'week' %}btn-primary{% else %}btn-secondary{% endif %}"
+            hx-get="/timeline?view=week{% if project_filter %}&project={{ project_filter }}{% endif %}"
+            hx-target="#timeline-content"
+            hx-push-url="/timeline?view=week{% if project_filter %}&project={{ project_filter }}{% endif %}"
+        >This Week</button>
+        <button
+            class="btn {% if current_view == 'month' %}btn-primary{% else %}btn-secondary{% endif %}"
+            hx-get="/timeline?view=month{% if project_filter %}&project={{ project_filter }}{% endif %}"
+            hx-target="#timeline-content"
+            hx-push-url="/timeline?view=month{% if project_filter %}&project={{ project_filter }}{% endif %}"
+        >This Month</button>
+    </div>
+
+    <select
+        class="input"
+        hx-get="/timeline?view={{ current_view }}&project={this.value}"
+        hx-target="#timeline-content"
+        hx-push-url="/timeline?view={{ current_view }}&project={this.value}"
+        hx-trigger="change"
+        name="project"
+    >
+        <option value="">All Projects</option>
+        {% for project in projects %}
+        <option value="{{ project.name }}" {% if project_filter == project.name %}selected{% endif %}>
+            {{ project.display_name or project.name }}
+        </option>
+        {% endfor %}
+    </select>
+</section>
+
+<!-- Timeline Content -->
+<section id="timeline-content">
+    {% if timeline_data %}
+    {% for group in timeline_data %}
+    <div class="timeline-group">
+        <h3 class="timeline-week-label">{{ group.week_label }}</h3>
+        <table class="task-table">
+            <thead>
+                <tr>
+                    <th>Task</th>
+                    <th>Project</th>
+                    <th>Type</th>
+                    <th>Completed</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for task in group.tasks %}
+                <tr>
+                    <td>
+                        <span class="status-icon status-done">&#10003;</span>
+                        {{ task.task_id }} — {{ task.title }}
+                    </td>
+                    <td><a href="/projects/{{ task.project_name }}">{{ task.project_name }}</a></td>
+                    <td>{{ task.type }}</td>
+                    <td>{{ task.completed_at }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endfor %}
+    {% else %}
+    <p class="empty-state">No completed tasks in this period.</p>
+    {% endif %}
+</section>
+{% endblock %}

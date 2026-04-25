@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard — Taskboard{% endblock %}
+
+{% block content %}
+<h1>Dashboard</h1>
+
+<!-- Metric Cards -->
+<section class="metrics-cards">
+    <div class="card metric-card">
+        <h3>Total Tasks</h3>
+        <p class="metric-value">{{ metrics.total_tasks }}</p>
+    </div>
+    <div class="card metric-card">
+        <h3>Completed</h3>
+        <p class="metric-value">{{ metrics.completed }}</p>
+    </div>
+    <div class="card metric-card">
+        <h3>Pending</h3>
+        <p class="metric-value">{{ metrics.pending }}</p>
+    </div>
+    <div class="card metric-card">
+        <h3>Completion Rate</h3>
+        <p class="metric-value">{{ metrics.completion_rate }}%</p>
+    </div>
+</section>
+
+<!-- Project Cards -->
+<section class="projects-section">
+    <div class="section-header">
+        <h2>Projects</h2>
+        <button
+            hx-get="/partials/metrics"
+            hx-target="#metrics-refresh"
+            class="btn btn-secondary btn-sm"
+        >
+            Refresh
+        </button>
+        <div id="metrics-refresh"></div>
+    </div>
+
+    {% if projects %}
+    <div class="project-grid">
+        {% for project in projects %}
+        <a href="/projects/{{ project.slug }}" class="card project-card">
+            <h3>{{ project.display_name or project.name }}</h3>
+            <p class="project-meta">{{ project.slug }} &middot; {{ project.origin }}</p>
+        </a>
+        {% endfor %}
+    </div>
+    {% else %}
+    <p class="empty-state">No projects found.</p>
+    {% endif %}
+</section>
+
+<!-- Recent Activity -->
+<section class="recent-section">
+    <div class="section-header">
+        <h2>Recent Activity</h2>
+        <button
+            hx-get="/partials/task-list?limit=10"
+            hx-target="#recent-tasks"
+            class="btn btn-secondary btn-sm"
+        >
+            Refresh
+        </button>
+    </div>
+
+    <div id="recent-tasks">
+        {% if recent_tasks %}
+        <table class="task-table">
+            <thead>
+                <tr>
+                    <th>Task</th>
+                    <th>Project</th>
+                    <th>Type</th>
+                    <th>Completed</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for task in recent_tasks %}
+                <tr>
+                    <td><a href="/projects/{{ task.project_name }}">{{ task.task_id }}</a> — {{ task.title }}</td>
+                    <td>{{ task.project_name }}</td>
+                    <td>{{ task.type }}</td>
+                    <td>{{ task.completed_at }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <p class="empty-state">No recent activity in the last 7 days.</p>
+        {% endif %}
+    </div>
+</section>
+{% endblock %}

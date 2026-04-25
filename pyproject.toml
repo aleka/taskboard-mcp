@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=75.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "taskboard-mcp"
+version = "0.1.0"
+description = "MCP server + web dashboard for personal task tracking"
+requires-python = ">=3.13"
+dependencies = [
+    "fastmcp>=3.2",
+    "starlette",
+    "jinja2",
+    "uvicorn[standard]",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "pytest-cov",
+]
+
+[tool.setuptools.packages.find]
+include = ["taskboard*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

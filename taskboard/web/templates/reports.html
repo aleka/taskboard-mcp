@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+
+{% block title %}Reports — Taskboard{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Reports</h1>
+    {% if has_filters %}
+    <a href="/reports" class="btn btn-secondary btn-sm">Clear Filters</a>
+    {% endif %}
+</div>
+
+<!-- Filter Form -->
+<section class="filter-form-section">
+    <form
+        class="form"
+        hx-get="/reports"
+        hx-target="#report-content"
+        hx-push-url="true"
+        hx-include="this"
+    >
+        <div class="form-row">
+            <div class="form-group">
+                <label for="start_date">Start Date</label>
+                <input type="date" id="start_date" name="start_date" value="{{ start_date }}" class="input">
+            </div>
+            <div class="form-group">
+                <label for="end_date">End Date</label>
+                <input type="date" id="end_date" name="end_date" value="{{ end_date }}" class="input">
+            </div>
+            <div class="form-group">
+                <label for="project">Project</label>
+                <select id="project" name="project" class="input">
+                    <option value="">All Projects</option>
+                    {% set selected_project = project %}
+                    {% for proj in projects %}
+                    <option value="{{ proj.name }}" {% if proj.name == selected_project %}selected{% endif %}>
+                        {{ proj.display_name or proj.name }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group form-actions">
+                <button type="submit" class="btn btn-primary">Generate Report</button>
+            </div>
+        </div>
+    </form>
+</section>
+
+<!-- Report Content -->
+<section id="report-content">
+    {% if has_filters %}
+    <!-- Metrics Preview -->
+    <section class="metrics-cards">
+        <div class="card metric-card">
+            <h3>Total Tasks</h3>
+            <p class="metric-value">{{ metrics.total_tasks }}</p>
+        </div>
+        <div class="card metric-card">
+            <h3>Completed</h3>
+            <p class="metric-value">{{ metrics.completed }}</p>
+        </div>
+        <div class="card metric-card">
+            <h3>Pending</h3>
+            <p class="metric-value">{{ metrics.pending }}</p>
+        </div>
+        <div class="card metric-card">
+            <h3>Completion Rate</h3>
+            <p class="metric-value">{{ metrics.completion_rate }}%</p>
+        </div>
+    </section>
+
+    <!-- Breakdowns -->
+    <section class="report-breakdowns">
+        <div class="card">
+            <h3>By Status</h3>
+            <table class="breakdown-table">
+                {% for status, count in metrics.tasks_by_status.items() %}
+                <tr>
+                    <td><span class="badge badge-{{ status }}">{{ status }}</span></td>
+                    <td>{{ count }}</td>
+                </tr>
+                {% endfor %}
+            </table>
+        </div>
+        <div class="card">
+            <h3>By Type</h3>
+            <table class="breakdown-table">
+                {% for type, count in metrics.tasks_by_type.items() %}
+                <tr>
+                    <td>{{ type }}</td>
+                    <td>{{ count }}</td>
+                </tr>
+                {% endfor %}
+            </table>
+        </div>
+    </section>
+
+    <!-- CSV Download -->
+    <section class="csv-download">
+        <a href="{{ csv_url }}" class="btn btn-success" download>Download CSV</a>
+    </section>
+    {% else %}
+    <p class="empty-state">Apply filters above to generate a report.</p>
+    {% endif %}
+</section>
+{% endblock %}

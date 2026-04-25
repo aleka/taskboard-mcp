@@ -1,0 +1,192 @@
+"""Tests for REST API endpoints — JSON assertions, error handling."""
+
+from __future__ import annotations
+
+import pytest
+
+
+class TestTasksAPI:
+    """GET/POST /api/tasks and GET/PATCH/DELETE /api/tasks/{id}."""
+
+    def test_list_tasks_empty(self, client):
+        r = client.get("/api/tasks")
+        assert r.status_code == 200
+        data = r.json()
+        assert "tasks" in data
+        assert "count" in data
+
+    def test_list_tasks_with_filter(self, client):
+        client.post("/api/tasks", json={"project": "testproj", "title": "Filter me"})
+        r = client.get("/api/tasks?project=testproj")
+        assert r.status_code == 200
+        data = r.json()
+        assert data["count"] >= 1
+
+    def test_list_tasks_status_filter(self, client):
+        client.post("/api/tasks", json={"project": "testproj", "title": "Todo task"})
+        r = client.get("/api/tasks?status=todo")
+        assert r.status_code == 200
+
+    def test_create_task_success(self, client):
+        r = client.post(
+            "/api/tasks",
+            json={"project": "testproj", "title": "New API task", "type": "feature"},
+        )
+        assert r.status_code == 201
+        data = r.json()
+        assert "task" in data
+        assert data["task"]["title"] == "New API task"
+        assert data["task"]["status"] == "todo"
+
+    def test_create_task_missing_project(self, client):
+        r = client.post("/api/tasks", json={"title": "No project"})
+        assert r.status_code == 400
+        assert "project" in r.json()["error"].lower()
+
+    def test_create_task_missing_title(self, client):
+        r = client.post("/api/tasks", json={"project": "testproj"})
+        assert r.status_code == 400
+
+    def test_create_task_invalid_project(self, client):
+        r = client.post(
+            "/api/tasks",
+            json={"project": "nonexistent", "title": "Orphan task"},
+        )
+        assert r.status_code == 400
+
+    def test_get_task_success(self, client):
+        create = client.post("/api/tasks", json={"project": "testproj", "title": "Get me"})
+        task_id = create.json()["task"]["task_id"]
+        r = client.get(f"/api/tasks/{task_id}")
+        assert r.status_code == 200
+        assert r.json()["task"]["task_id"] == task_id
+
+    def test_get_task_not_found(self, client):
+        r = client.get("/api/tasks/nonexistent_999")
+        assert r.status_code == 404
+
+    def test_update_task_status(self, client):
+        create = client.post("/api/tasks", json={"project": "testproj", "title": "Update me"})
+        task_id = create.json()["task"]["task_id"]
+        r = client.patch(
+            f"/api/tasks/{task_id}",
+            json={"status": "in_progress", "note": "Started working"},
+        )
+        assert r.status_code == 200
+        assert r.json()["task"]["status"] == "in_progress"
+
+    def test_update_task_missing_status(self, client):
+        create = client.post("/api/tasks", json={"project": "testproj", "title": "X"})
+        task_id = create.json()["task"]["task_id"]
+        r = client.patch(f"/api/tasks/{task_id}", json={"note": "no status"})
+        assert r.status_code == 400
+
+    def test_update_task_not_found(self, client):
+        r = client.patch("/api/tasks/nonexistent_999", json={"status": "done"})
+        assert r.status_code == 404
+
+    def test_delete_task_success(self, client):
+        create = client.post("/api/tasks", json={"project": "testproj", "title": "Delete me"})
+        task_id = create.json()["task"]["task_id"]
+        r = client.delete(f"/api/tasks/{task_id}")
+        assert r.status_code == 200
+        assert r.json()["deleted"] is True
+        # Verify it's gone
+        r2 = client.get(f"/api/tasks/{task_id}")
+        assert r2.status_code == 404
+
+    def test_delete_task_not_found(self, client):
+        r = client.delete("/api/tasks/nonexistent_999")
+        assert r.status_code == 404
+
+
+class TestProjectsAPI:
+    """GET/POST /api/projects and GET /api/projects/{slug}."""
+
+    def test_list_projects(self, client):
+        r = client.get("/api/projects")
+        assert r.status_code == 200
+        data = r.json()
+        assert "projects" in data
+        assert "count" in data
+        assert data["count"] >= 1
+
+    def test_create_project_success(self, client):
+        r = client.post(
+            "/api/projects",
+            json={"name": "newproj", "display_name": "New Project", "slug": "np", "path": "/tmp/np"},
+        )
+        assert r.status_code == 201
+        data = r.json()
+        assert data["project"]["slug"] == "np"
+
+    def test_create_project_missing_name(self, client):
+        r = client.post("/api/projects", json={"display_name": "No Name"})
+        assert r.status_code == 400
+
+    def test_create_project_duplicate(self, client):
+        client.post(
+            "/api/projects",
+            json={"name": "dupproj", "slug": "dp", "path": "/tmp/dp"},
+        )
+        r = client.post(
+            "/api/projects",
+            json={"name": "dupproj", "slug": "dp2", "path": "/tmp/dp2"},
+        )
+        assert r.status_code == 400
+
+    def test_get_project_success(self, client):
+        r = client.get("/api/projects/tp")
+        assert r.status_code == 200
+        assert r.json()["project"]["slug"] == "tp"
+
+    def test_get_project_not_found(self, client):
+        r = client.get("/api/projects/nonexistent")
+        assert r.status_code == 404
+
+
+class TestMetricsAPI:
+    """GET /api/metrics with filters."""
+
+    def test_metrics_global(self, client):
+        r = client.get("/api/metrics")
+        assert r.status_code == 200
+        data = r.json()
+        assert "total_tasks" in data
+        assert "completed" in data
+        assert "completion_rate" in data
+        assert "tasks_by_status" in data
+        assert "tasks_by_type" in data
+
+    def test_metrics_project_filter(self, client):
+        r = client.get("/api/metrics?project=testproj")
+        assert r.status_code == 200
+
+    def test_metrics_date_filter(self, client):
+        r = client.get("/api/metrics?start_date=2026-01-01&end_date=2026-12-31")
+        assert r.status_code == 200
+
+
+class TestCsvExportAPI:
+    """GET /api/export/csv — content type, disposition, CSV content."""
+
+    def test_csv_export_content_type(self, client):
+        r = client.get("/api/export/csv")
+        assert r.status_code == 200
+        assert r.headers["content-type"] == "text/csv; charset=utf-8"
+
+    def test_csv_export_disposition(self, client):
+        r = client.get("/api/export/csv")
+        assert "attachment" in r.headers.get("content-disposition", "")
+        assert "tasks.csv" in r.headers.get("content-disposition", "")
+
+    def test_csv_export_has_header(self, client):
+        client.post("/api/tasks", json={"project": "testproj", "title": "CSV task"})
+        r = client.get("/api/export/csv")
+        lines = r.text.strip().split("\n")
+        assert "task_id" in lines[0]
+        assert "title" in lines[0]
+
+    def test_csv_export_with_filter(self, client):
+        r = client.get("/api/export/csv?project=testproj")
+        assert r.status_code == 200

@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+
+{% block title %}{% if project %}{{ project.display_name or project.name }}{% else %}Project Not Found{% endif %} — Taskboard{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    {% if project %}
+    <div>
+        <h1>{{ project.display_name or project.name }}</h1>
+        <p class="project-meta">{{ project.slug }} &middot; {{ project.origin }} &middot; {{ project.path }}</p>
+    </div>
+    {% else %}
+    <div>
+        <h1>Project Not Found</h1>
+        <p class="empty-state">The project <strong>{{ slug }}</strong> does not exist.</p>
+    </div>
+    {% endif %}
+    <a href="/projects" class="btn btn-secondary btn-sm">&larr; All Projects</a>
+</div>
+
+{% if project %}
+<!-- Filter Buttons -->
+<section class="filter-bar">
+    <button
+        class="btn {% if not status_filter %}btn-primary{% else %}btn-secondary{% endif %}"
+        hx-get="/projects/{{ slug }}"
+        hx-target="#task-list"
+        hx-push-url="/projects/{{ slug }}"
+    >All</button>
+    <button
+        class="btn {% if status_filter == 'todo' %}btn-primary{% else %}btn-secondary{% endif %}"
+        hx-get="/projects/{{ slug }}?status=todo"
+        hx-target="#task-list"
+        hx-push-url="/projects/{{ slug }}?status=todo"
+    >Pending</button>
+    <button
+        class="btn {% if status_filter == 'in_progress' %}btn-primary{% else %}btn-secondary{% endif %}"
+        hx-get="/projects/{{ slug }}?status=in_progress"
+        hx-target="#task-list"
+        hx-push-url="/projects/{{ slug }}?status=in_progress"
+    >In Progress</button>
+    <button
+        class="btn {% if status_filter == 'blocked' %}btn-primary{% else %}btn-secondary{% endif %}"
+        hx-get="/projects/{{ slug }}?status=blocked"
+        hx-target="#task-list"
+        hx-push-url="/projects/{{ slug }}?status=blocked"
+    >Blocked</button>
+    <button
+        class="btn {% if status_filter == 'done' %}btn-primary{% else %}btn-secondary{% endif %}"
+        hx-get="/projects/{{ slug }}?status=done"
+        hx-target="#task-list"
+        hx-push-url="/projects/{{ slug }}?status=done"
+    >Done</button>
+    <button
+        class="btn {% if status_filter == 'cancelled' %}btn-primary{% else %}btn-secondary{% endif %}"
+        hx-get="/projects/{{ slug }}?status=cancelled"
+        hx-target="#task-list"
+        hx-push-url="/projects/{{ slug }}?status=cancelled"
+    >Cancelled</button>
+</section>
+
+<!-- Task Table -->
+<section id="task-list">
+    {% if tasks %}
+    <table class="task-table">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Title</th>
+                <th>Type</th>
+                <th>Status</th>
+                <th>Priority</th>
+                <th>Created</th>
+                <th>Completed</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for task in tasks %}
+            <tr>
+                <td>{{ task.task_id }}</td>
+                <td>{{ task.title }}</td>
+                <td>{{ task.type }}</td>
+                <td><span class="badge badge-{{ task.status }}">{{ task.status }}</span></td>
+                <td>{{ task.priority }}</td>
+                <td>{{ task.created_at }}</td>
+                <td>{{ task.completed_at or "—" }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p class="empty-state">No tasks found{% if status_filter %} with status "{{ status_filter }}"{% endif %}.</p>
+    {% endif %}
+</section>
+
+<!-- Add Task Form -->
+<section class="add-task-section">
+    <h2>Add Task</h2>
+    <form
+        hx-post="/actions/tasks"
+        hx-target="#add-task-result"
+        class="form"
+    >
+        <input type="hidden" name="project" value="{{ project.name }}">
+        <div class="form-row">
+            <input type="text" name="title" placeholder="Task title" required class="input">
+            <select name="type" class="input">
+                <option value="chore">chore</option>
+                <option value="feature">feature</option>
+                <option value="bugfix">bugfix</option>
+                <option value="refactor">refactor</option>
+                <option value="config">config</option>
+                <option value="docs">docs</option>
+                <option value="testing">testing</option>
+                <option value="infra">infra</option>
+            </select>
+            <select name="priority" class="input">
+                <option value="medium">medium</option>
+                <option value="low">low</option>
+                <option value="high">high</option>
+                <option value="urgent">urgent</option>
+            </select>
+            <button type="submit" class="btn btn-primary">Add Task</button>
+        </div>
+        <div id="add-task-result"></div>
+    </form>
+</section>
+{% endif %}
+{% endblock %}

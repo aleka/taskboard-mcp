@@ -1,0 +1,33 @@
+{# timeline_group.html — Timeline items fragment (HTMX partial, no extends) #}
+{% if timeline_data %}
+{% for group in timeline_data %}
+<div class="timeline-group">
+    <h3 class="timeline-week-label">{{ group.week_label }}</h3>
+    <table class="task-table">
+        <thead>
+            <tr>
+                <th>Task</th>
+                <th>Project</th>
+                <th>Type</th>
+                <th>Completed</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for task in group.tasks %}
+            <tr>
+                <td>
+                    <span class="status-icon status-done">&#10003;</span>
+                    {{ task.task_id }} — {{ task.title }}
+                </td>
+                <td><a href="/projects/{{ task.project_name }}">{{ task.project_name }}</a></td>
+                <td>{{ task.type }}</td>
+                <td>{{ task.completed_at }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endfor %}
+{% else %}
+<p class="empty-state">No completed tasks in this period.</p>
+{% endif %}
