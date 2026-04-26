@@ -35,25 +35,6 @@ Un solo proceso Starlette sirve las tres interfaces: MCP (via fastmcp), REST API
 
 ---
 
-## Herramientas MCP
-
-10 herramientas disponibles para agentes de IA via MCP (OpenCode, Claude Desktop, etc.):
-
-| Herramienta | Parámetros | Descripción |
-|-------------|-----------|-------------|
-| `add_task` | project, title, type, description, tags, priority | Crear una nueva tarea en un proyecto |
-| `complete_task` | task_id, summary | Marcar tarea como completada |
-| `update_task_status` | task_id, status, note | Cambiar estado (todo, in_progress, blocked, cancelled) |
-| `list_tasks` | project, status, type, from_date, to_date, limit, offset | Listar tareas con filtros opcionales |
-| `get_task` | task_id | Obtener detalle de una tarea por ID |
-| `add_project` | name, display_name, slug, origin, path, tags | Registrar un nuevo proyecto |
-| `list_projects` | — | Listar todos los proyectos registrados |
-| `get_metrics` | project, start_date, end_date | Métricas y analytics (tasas de completitud, desglose por status/tipo) |
-| `get_timeline` | project, view (week/month) | Timeline de tareas completadas agrupadas por semana o mes |
-| `export_csv` | project, start_date, end_date | Exportar tareas como CSV con filtros |
-
----
-
 ## Quick Start
 
 ### Desarrollo local
@@ -102,6 +83,8 @@ El watchdog chequea cada 30 minutos si el container está corriendo. Si no, logu
 | [Guía de desarrollo](docs/guia-desarrollo.md) | Setup local, tests, Docker, estructura, cómo contribuir |
 | [Procedimiento de release](docs/release-procedure.md) | SemVer, flujo git tag → GitHub release, checklist |
 | [Investigación Engram Cloud](docs/investigacion-engram-cloud.md) | Arquitectura y patrones extraídos de Engram |
+| [Herramientas MCP](docs/mcp-tools.md) | Documentación de las 10 herramientas MCP (parámetros, ejemplos, respuestas) |
+| [Guía web dashboard](docs/guia-web.md) | Páginas, acciones HTMX, partials y REST API |
 | [Coding standards](AGENTS.md) | Convenciones de código Python |
 
 ---
