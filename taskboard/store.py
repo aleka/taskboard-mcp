@@ -65,7 +65,7 @@ class TaskboardStore:
     def _close(self, conn: sqlite3.Connection) -> None:
         """Close a connection unless it's the persistent test connection."""
         if conn is not self._persistent_conn:
-            self._close(conn)
+            conn.close()
 
     def __enter__(self) -> TaskboardStore:
         return self
