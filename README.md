@@ -82,9 +82,10 @@ El watchdog chequea cada 30 minutos si el container está corriendo. Si no, logu
 |------|-------------|
 | [Guía de desarrollo](docs/guia-desarrollo.md) | Setup local, tests, Docker, estructura, cómo contribuir |
 | [Procedimiento de release](docs/release-procedure.md) | SemVer, flujo git tag → GitHub release, checklist |
-| [Investigación Engram Cloud](docs/investigacion-engram-cloud.md) | Arquitectura y patrones extraídos de Engram |
 | [Herramientas MCP](docs/mcp-tools.md) | Documentación de las 10 herramientas MCP (parámetros, ejemplos, respuestas) |
 | [Guía web dashboard](docs/guia-web.md) | Páginas, acciones HTMX, partials y REST API |
+| [Seguimiento SDD](docs/sdd-phases/seguimiento-sdd.md) | Documento de creación del proyecto (exploración, specs, diseño, implementación, lecciones) |
+| [Investigación Engram Cloud](docs/investigacion-engram-cloud.md) | Arquitectura y patrones extraídos de Engram |
 | [Coding standards](AGENTS.md) | Convenciones de código Python |
 
 ---
@@ -140,8 +141,16 @@ taskboard-mcp/
 │   └── test_api_routes.py        # Tests de la REST API (JSON)
 ├── docs/
 │   ├── guia-desarrollo.md        # Guía de desarrollo
+│   ├── guia-web.md               # Guía del web dashboard
+│   ├── mcp-tools.md              # Documentación de las 10 herramientas MCP
 │   ├── release-procedure.md      # Procedimiento de release
-│   └── investigacion-engram-cloud.md # Investigación de arquitectura
+│   ├── investigacion-engram-cloud.md # Investigación de arquitectura
+│   └── sdd-phases/
+│       ├── seguimiento-sdd.md    # Documento de creación del proyecto
+│       └── tasks-breakdown.md    # Desglose de las 32 tasks de implementación
+├── .github/
+│   ├── ISSUE_TEMPLATE/           # Templates de bugs y features
+│   └── PULL_REQUEST_TEMPLATE.md  # Template de PRs
 ├── Dockerfile                    # Imagen Python 3.13-slim + uv
 ├── docker-compose.yml            # Container con health check + auto-restart
 ├── watchdog.sh                   # Script de monitoreo via cron

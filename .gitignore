@@ -30,8 +30,9 @@ Thumbs.db
 # Lock file (uv)
 uv.lock
 
-# SDD phases (internal docs, not for distribution)
-sdd-phases/
+# SDD phases now lives in docs/sdd-phases/ (tracked)
+# Only exclude if at repo root (stale copy)
+/sdd-phases/
 
 # AI tooling (local config, not for distribution)
 .atl/
