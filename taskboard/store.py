@@ -1,7 +1,7 @@
 """TaskboardStore — SQLite persistence layer for the taskboard.
 
-Single persistent connection with WAL mode, context manager lifecycle,
-and full CRUD + analytics + CSV export over the existing schema.
+Thread-safe connection via threading.local(), WAL mode, context manager
+lifecycle, and full CRUD + analytics + CSV export over the existing schema.
 """
 
 from __future__ import annotations
@@ -11,12 +11,17 @@ import io
 import json
 import os
 import sqlite3
+import threading
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
 
 class TaskboardStore:
-    """Manages a single SQLite connection to ~/.taskboard/taskboard.db.
+    """Manages thread-local SQLite connections to ~/.taskboard/taskboard.db.
+
+    Each thread gets its own connection via ``threading.local()``.
+    Safe for use behind MCP servers and web frameworks that dispatch
+    to multiple threads.
 
     Usage::
 
@@ -27,20 +32,21 @@ class TaskboardStore:
 
     def __init__(self, db_path: str = "~/.taskboard/taskboard.db") -> None:
         self._db_path = os.path.expanduser(db_path)
-        self._conn: sqlite3.Connection | None = None
+        self._local = threading.local()
 
     # ── Connection lifecycle ──────────────────────────────────────────
 
     def _connect(self) -> sqlite3.Connection:
-        """Open (or reuse) a connection with WAL, busy_timeout, FK."""
-        if self._conn is not None:
-            return self._conn
+        """Open (or reuse) a thread-local connection with WAL, busy_timeout, FK."""
+        conn = getattr(self._local, "conn", None)
+        if conn is not None:
+            return conn
         conn = sqlite3.connect(self._db_path, check_same_thread=False)
         conn.execute("PRAGMA journal_mode = WAL")
         conn.execute("PRAGMA busy_timeout = 5000")
         conn.execute("PRAGMA foreign_keys = ON")
         conn.row_factory = sqlite3.Row
-        self._conn = conn
+        self._local.conn = conn
         return conn
 
     @property
@@ -52,9 +58,10 @@ class TaskboardStore:
         return self
 
     def __exit__(self, *exc: object) -> None:
-        if self._conn is not None:
-            self._conn.close()
-            self._conn = None
+        conn = getattr(self._local, "conn", None)
+        if conn is not None:
+            conn.close()
+            self._local.conn = None
 
     # ── Helpers ──────────────────────────────────────────────────────
 
