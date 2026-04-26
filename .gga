@@ -2,7 +2,7 @@
 # https://github.com/Gentleman-Programming/gentleman-guardian-angel
 
 # AI Provider
-PROVIDER="claude"
+PROVIDER="opencode"
 
 # File patterns to review (Python project)
 FILE_PATTERNS="*.py,*.html,*.css,*.js,*.yml,*.toml,*.sh"
@@ -17,4 +17,4 @@ RULES_FILE="AGENTS.md"
 STRICT_MODE="true"
 
 # Timeout for AI response
-TIMEOUT="300"
+TIMEOUT="120"
