@@ -3,139 +3,159 @@
 {% block title %}{% if task %}{{ task.task_id }} — {{ task.title }}{% else %}Task Not Found{% endif %} — Taskboard{% endblock %}
 
 {% block content %}
-<div class="page-header">
+<div class="container">
     {% if task %}
-    <div>
-        <h1>{{ task.task_id }} — {{ task.title }}</h1>
-        <p class="task-meta">
+    <!-- Breadcrumb at the very top -->
+    <nav class="breadcrumb">
+        <a href="/">Dashboard</a> &raquo;
+        {% if project %}
+        <a href="/projects/{{ project.slug }}">{{ project.display_name or project.name }}</a> &raquo;
+        {% else %}
+        {{ task.project_name }} &raquo;
+        {% endif %}
+        <span>{{ task.task_id }}</span>
+    </nav>
+
+    <div class="task-view-header">
+        <div class="task-title-group">
+            <span class="task-id-label">{{ task.task_id }}</span>
+            <h1>{{ task.title }}</h1>
+        </div>
+        
+        <div class="header-actions">
+            <a href="/" class="btn btn-secondary btn-sm">&larr; Dashboard</a>
+        </div>
+    </div>
+
+    <div class="task-status-bar">
+        <div class="status-item">
+            <span class="status-label">Estado</span>
             <span class="badge badge-{{ task.status }}">{{ task.status }}</span>
+        </div>
+        <div class="status-divider"></div>
+        <div class="status-item">
+            <span class="status-label">Tipo</span>
             <span class="badge badge-type">{{ task.type }}</span>
+        </div>
+        <div class="status-divider"></div>
+        <div class="status-item">
+            <span class="status-label">Prioridad</span>
             <span class="badge badge-priority-{{ task.priority }}">{{ task.priority }}</span>
-        </p>
+        </div>
     </div>
-    <div class="nav-buttons">
-        {% if neighbors and neighbors.prev %}
-        <a href="/tasks/{{ neighbors.prev }}" class="btn btn-secondary btn-sm">&larr; {{ neighbors.prev }}</a>
-        {% endif %}
-        {% if neighbors and neighbors.next %}
-        <a href="/tasks/{{ neighbors.next }}" class="btn btn-secondary btn-sm">{{ neighbors.next }} &rarr;</a>
-        {% endif %}
-    </div>
+
+    <!-- Task Details Card -->
+    <section class="task-detail-card card">
+        <h2 class="card-title">Datos de la tarea</h2>
+        <table class="detail-table">
+            <tbody>
+                <tr>
+                    <th>ID</th>
+                    <td><code>{{ task.task_id }}</code></td>
+                </tr>
+                <tr>
+                    <th>Título</th>
+                    <td>{{ task.title }}</td>
+                </tr>
+                <tr>
+                    <th>Tipo</th>
+                    <td>{{ task.type }}</td>
+                </tr>
+                <tr>
+                    <th>Estado</th>
+                    <td><span class="badge badge-{{ task.status }}">{{ task.status }}</span></td>
+                </tr>
+                <tr>
+                    <th>Prioridad</th>
+                    <td><span class="badge badge-priority-{{ task.priority }}">{{ task.priority }}</span></td>
+                </tr>
+                <tr>
+                    <th>Origen</th>
+                    <td>{{ task.source }}</td>
+                </tr>
+                <tr>
+                    <th>Proyecto</th>
+                    <td>
+                        {% if project %}
+                        <a href="/projects/{{ project.slug }}">{{ project.display_name or project.name }}</a>
+                        {% else %}
+                        {{ task.project_name }}
+                        {% endif %}
+                    </td>
+                </tr>
+                <tr>
+                    <th>Creada</th>
+                    <td>{{ task.created_at }}</td>
+                </tr>
+                <tr>
+                    <th>Completada</th>
+                    <td>{{ task.completed_at or "&mdash;" }}</td>
+                </tr>
+                {% if task.git_commit %}
+                <tr>
+                    <th>Git Commit</th>
+                    <td><code>{{ task.git_commit }}</code></td>
+                </tr>
+                {% endif %}
+                {% if task.git_branch %}
+                <tr>
+                    <th>Git Branch</th>
+                    <td><code>{{ task.git_branch }}</code></td>
+                </tr>
+                {% endif %}
+                {% if task.description %}
+                <tr>
+                    <th>Descripción</th>
+                    <td class="long-text">{{ task.description }}</td>
+                </tr>
+                {% endif %}
+                {% if task.summary %}
+                <tr>
+                    <th>Resumen</th>
+                    <td class="long-text">{{ task.summary }}</td>
+                </tr>
+                {% endif %}
+                <tr>
+                    <th>Tags</th>
+                    <td>
+                        {% if tags and tags|length > 0 %}
+                        {% for tag in tags %}
+                        <span class="badge badge-tag">{{ tag }}</span>
+                        {% endfor %}
+                        {% else %}
+                        <span class="empty-value">[]</span>
+                        {% endif %}
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </section>
+
+    <!-- Navigation Buttons at the bottom -->
+    <section class="task-nav">
+        <div class="nav-prev">
+            {% if neighbors and neighbors.prev %}
+            <a href="/tasks/{{ neighbors.prev }}" class="btn btn-secondary">
+                <span class="nav-arrow">&larr;</span> Anterior: <strong>{{ neighbors.prev }}</strong>
+            </a>
+            {% endif %}
+        </div>
+        <div class="nav-next">
+            {% if neighbors and neighbors.next %}
+            <a href="/tasks/{{ neighbors.next }}" class="btn btn-secondary">
+                Siguiente: <strong>{{ neighbors.next }}</strong> <span class="nav-arrow">&rarr;</span>
+            </a>
+            {% endif %}
+        </div>
+    </section>
+
     {% else %}
-    <div>
-        <h1>Task Not Found</h1>
-        <p class="empty-state">The task <strong>{{ task_id }}</strong> does not exist.</p>
+    <div class="empty-state-container">
+        <h1>Tarea no encontrada</h1>
+        <p class="empty-state">La tarea <strong>{{ task_id }}</strong> no existe.</p>
+        <a href="/" class="btn btn-primary">Volver al Dashboard</a>
     </div>
     {% endif %}
-    <a href="/" class="btn btn-secondary btn-sm">&larr; Dashboard</a>
 </div>
-
-{% if task %}
-<!-- Breadcrumb -->
-<nav class="breadcrumb">
-    <a href="/">Dashboard</a> &raquo;
-    {% if project %}
-    <a href="/projects/{{ project.slug }}">{{ project.display_name or project.name }}</a> &raquo;
-    {% else %}
-    {{ task.project_name }} &raquo;
-    {% endif %}
-    <span>{{ task.task_id }}</span>
-</nav>
-
-<!-- Task Details Card -->
-<section class="task-detail-card">
-    <table class="detail-table">
-        <tbody>
-            <tr>
-                <th>task_id</th>
-                <td>{{ task.task_id }}</td>
-            </tr>
-            <tr>
-                <th>title</th>
-                <td>{{ task.title }}</td>
-            </tr>
-            <tr>
-                <th>type</th>
-                <td>{{ task.type }}</td>
-            </tr>
-            <tr>
-                <th>status</th>
-                <td><span class="badge badge-{{ task.status }}">{{ task.status }}</span></td>
-            </tr>
-            <tr>
-                <th>priority</th>
-                <td><span class="badge badge-priority-{{ task.priority }}">{{ task.priority }}</span></td>
-            </tr>
-            <tr>
-                <th>source</th>
-                <td>{{ task.source }}</td>
-            </tr>
-            <tr>
-                <th>project</th>
-                <td>
-                    {% if project %}
-                    <a href="/projects/{{ project.slug }}">{{ project.display_name or project.name }}</a>
-                    {% else %}
-                    {{ task.project_name }}
-                    {% endif %}
-                </td>
-            </tr>
-            <tr>
-                <th>created_at</th>
-                <td>{{ task.created_at }}</td>
-            </tr>
-            <tr>
-                <th>completed_at</th>
-                <td>{{ task.completed_at or "&mdash;" }}</td>
-            </tr>
-            {% if task.git_commit %}
-            <tr>
-                <th>git_commit</th>
-                <td><code>{{ task.git_commit }}</code></td>
-            </tr>
-            {% endif %}
-            {% if task.git_branch %}
-            <tr>
-                <th>git_branch</th>
-                <td><code>{{ task.git_branch }}</code></td>
-            </tr>
-            {% endif %}
-            {% if task.description %}
-            <tr>
-                <th>description</th>
-                <td class="long-text">{{ task.description }}</td>
-            </tr>
-            {% endif %}
-            {% if task.summary %}
-            <tr>
-                <th>summary</th>
-                <td class="long-text">{{ task.summary }}</td>
-            </tr>
-            {% endif %}
-            <tr>
-                <th>tags</th>
-                <td>
-                    {% if tags and tags|length > 0 %}
-                    {% for tag in tags %}
-                    <span class="badge badge-tag">{{ tag }}</span>
-                    {% endfor %}
-                    {% else %}
-                    <span class="empty-value">[]</span>
-                    {% endif %}
-                </td>
-            </tr>
-        </tbody>
-    </table>
-</section>
-
-<!-- Navigation -->
-<section class="task-nav">
-    {% if neighbors and neighbors.prev %}
-    <a href="/tasks/{{ neighbors.prev }}" class="btn btn-secondary">&larr; Anterior: {{ neighbors.prev }}</a>
-    {% endif %}
-    {% if neighbors and neighbors.next %}
-    <a href="/tasks/{{ neighbors.next }}" class="btn btn-secondary">Siguiente: {{ neighbors.next }} &rarr;</a>
-    {% endif %}
-</section>
-{% endif %}
 {% endblock %}
+
