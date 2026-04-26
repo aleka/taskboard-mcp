@@ -34,7 +34,7 @@
     >
         <option value="">All Projects</option>
         {% for project in projects %}
-        <option value="{{ project.name }}" {% if project_filter == project.name %}selected{% endif %}>
+        <option value="{{ project.slug }}" {% if project_filter == project.slug %}selected{% endif %}>
             {{ project.display_name or project.name }}
         </option>
         {% endfor %}
@@ -63,7 +63,7 @@
                         <span class="status-icon status-done">&#10003;</span>
                         {{ task.task_id }} — {{ task.title }}
                     </td>
-                    <td><a href="/projects/{{ task.project_name }}">{{ task.project_name }}</a></td>
+                    <td><a href="/projects/{{ task.slug }}">{{ task.slug }}</a></td>
                     <td>{{ task.type }}</td>
                     <td>{{ task.completed_at }}</td>
                 </tr>

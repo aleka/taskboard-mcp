@@ -111,10 +111,17 @@ async def timeline_view(request: Request) -> HTMLResponse:
     view = request.query_params.get("view", "week")
     project_filter = request.query_params.get("project", "")
 
+    # Resolve slug → project_name for the store (store filters by name, not slug)
+    project_name_filter: str | None = None
+    if project_filter:
+        project = store.get_project(project_filter)
+        if project:
+            project_name_filter = project["name"]
+
     if view == "month":
-        timeline_data = store.get_timeline_month(project=project_filter or None)
+        timeline_data = store.get_timeline_month(project=project_name_filter)
     else:
-        timeline_data = store.get_timeline_week(project=project_filter or None)
+        timeline_data = store.get_timeline_week(project=project_name_filter)
 
     projects = store.list_projects()
 

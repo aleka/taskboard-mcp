@@ -358,8 +358,9 @@ class TaskboardStore:
         where += f" AND completed_at >= {since_expr}"
 
         rows = self.conn.execute(
-            f"SELECT task_id, title, type, project_name, completed_at "
-            f"FROM tasks{where} ORDER BY completed_at DESC",
+            f"SELECT t.task_id, t.title, t.type, t.project_name, t.completed_at, p.slug "
+            f"FROM tasks t JOIN projects p ON t.project_name = p.name"
+            f"{where} ORDER BY t.completed_at DESC",
             params,
         ).fetchall()
 
