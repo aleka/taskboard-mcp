@@ -12,25 +12,26 @@ import pytest
 
 class TestConnectionLifecycle:
     def test_context_manager_enter_exit(self, store):
-        assert store._conn is not None
-        # __exit__ is called by fixture, connection should be closed
+        # Connection-per-call: _persistent_conn exists for in-memory stores
+        assert store._persistent_conn is not None
 
     def test_wal_mode(self, store):
-        mode = store.conn.execute("PRAGMA journal_mode").fetchone()[0]
+        mode = store._connect().execute("PRAGMA journal_mode").fetchone()[0]
         # In-memory DB uses 'memory' journal mode, not 'wal'
         assert mode in ("wal", "memory")
 
     def test_busy_timeout(self, store):
-        timeout = store.conn.execute("PRAGMA busy_timeout").fetchone()[0]
+        timeout = store._connect().execute("PRAGMA busy_timeout").fetchone()[0]
         assert timeout == 5000
 
     def test_foreign_keys(self, store):
-        fk = store.conn.execute("PRAGMA foreign_keys").fetchone()[0]
+        fk = store._connect().execute("PRAGMA foreign_keys").fetchone()[0]
         assert fk == 1
 
     def test_connection_reuse(self, store):
-        conn1 = store.conn
-        conn2 = store.conn
+        # In-memory stores reuse the persistent connection
+        conn1 = store._connect()
+        conn2 = store._connect()
         assert conn1 is conn2
 
     def test_default_db_path(self):
@@ -230,7 +231,7 @@ class TestTaskCrud:
     def test_update_task_status_records_history(self, store):
         t = store.add_task("testproj", "History test")
         store.update_task_status(t["task_id"], "blocked", note="Waiting")
-        history = store.conn.execute(
+        history = store._connect().execute(
             "SELECT from_status, to_status, note FROM task_history WHERE task_id = ?",
             (t["task_id"],),
         ).fetchall()
@@ -254,7 +255,7 @@ class TestTaskCrud:
     def test_complete_task_records_history(self, store):
         t = store.add_task("testproj", "Complete history")
         store.complete_task(t["task_id"], summary="Done", git_commit="abc123")
-        history = store.conn.execute(
+        history = store._connect().execute(
             "SELECT from_status, to_status, note, git_commit FROM task_history "
             "WHERE task_id = ? ORDER BY id",
             (t["task_id"],),
@@ -289,7 +290,7 @@ class TestTaskCrud:
         t = store.add_task("testproj", "Cascade test")
         store.complete_task(t["task_id"])
         store.delete_task(t["task_id"])
-        history = store.conn.execute(
+        history = store._connect().execute(
             "SELECT COUNT(*) FROM task_history WHERE task_id = ?",
             (t["task_id"],),
         ).fetchone()[0]
@@ -302,7 +303,7 @@ class TestTaskCrud:
 class TestHistoryRecording:
     def test_creation_records_history(self, store):
         t = store.add_task("testproj", "New task")
-        history = store.conn.execute(
+        history = store._connect().execute(
             "SELECT from_status, to_status FROM task_history WHERE task_id = ?",
             (t["task_id"],),
         ).fetchall()
@@ -316,7 +317,7 @@ class TestHistoryRecording:
         store.update_task_status(t["task_id"], "in_progress")
         store.update_task_status(t["task_id"], "blocked")
         store.complete_task(t["task_id"])
-        history = store.conn.execute(
+        history = store._connect().execute(
             "SELECT from_status, to_status FROM task_history "
             "WHERE task_id = ? ORDER BY id",
             (t["task_id"],),

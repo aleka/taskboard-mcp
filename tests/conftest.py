@@ -12,18 +12,8 @@ from taskboard.web.app import create_app
 @pytest.fixture
 def store():
     """In-memory store with schema initialized for testing."""
-    s = TaskboardStore(":memory:")
-    with s:
-        _init_schema(s)
-        # Seed a default test project
-        s.add_project(
-            name="testproj",
-            display_name="Test Project",
-            slug="tp",
-            origin="local",
-            path="/tmp/testproj",
-        )
-        yield s
+    s = _create_in_memory_store()
+    yield s
 
 
 @pytest.fixture
@@ -56,12 +46,8 @@ def seeded_store(store, second_project):
 
 @pytest.fixture
 def client():
-    """TestClient with thread-safe in-memory store — fresh per test.
-
-    Starlette's TestClient runs requests in a background thread,
-    so we need check_same_thread=False on the SQLite connection.
-    """
-    s = _create_thread_safe_store()
+    """TestClient with thread-safe in-memory store — fresh per test."""
+    s = _create_in_memory_store(check_same_thread=False)
     app = create_app(store=s)
     with TestClient(app) as c:
         yield c
@@ -70,7 +56,7 @@ def client():
 @pytest.fixture
 def seeded_client():
     """TestClient with pre-seeded store (projects + tasks across statuses)."""
-    s = _create_thread_safe_store()
+    s = _create_in_memory_store(check_same_thread=False)
     # Seed second project
     s.add_project(
         name="otherproj",
@@ -90,16 +76,17 @@ def seeded_client():
         yield c
 
 
-def _create_thread_safe_store() -> TaskboardStore:
-    """Create an in-memory store with check_same_thread=False.
+def _create_in_memory_store(check_same_thread: bool = True) -> TaskboardStore:
+    """Create an in-memory store with a persistent connection.
 
-    Required for TestClient which runs in a separate thread.
+    For TestClient (which runs in a separate thread), pass
+    check_same_thread=False.
     """
     s = TaskboardStore.__new__(TaskboardStore)
     s._db_path = ":memory:"
-    s._conn = sqlite3.connect(":memory:", check_same_thread=False)
-    s._conn.row_factory = sqlite3.Row
-    _init_schema(s)
+    s._persistent_conn = sqlite3.connect(":memory:", check_same_thread=check_same_thread)
+    s._persistent_conn.row_factory = sqlite3.Row
+    _init_schema(s._persistent_conn)
     # Seed default test project
     s.add_project(
         name="testproj",
@@ -111,9 +98,9 @@ def _create_thread_safe_store() -> TaskboardStore:
     return s
 
 
-def _init_schema(s: TaskboardStore) -> None:
+def _init_schema(conn: sqlite3.Connection) -> None:
     """Create the taskboard schema in an in-memory DB."""
-    s.conn.executescript("""
+    conn.executescript("""
         PRAGMA journal_mode = WAL;
         PRAGMA foreign_keys = ON;
 

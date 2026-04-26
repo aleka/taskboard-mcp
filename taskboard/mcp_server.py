@@ -20,11 +20,13 @@ _store: TaskboardStore | None = None
 
 
 def _get_store() -> TaskboardStore:
-    """Return the shared store instance, initializing lazily."""
+    """Return the shared store instance, initializing lazily.
+
+    No ``__enter__`` needed — the store uses connection-per-operation.
+    """
     global _store
     if _store is None:
         _store = TaskboardStore()
-        _store.__enter__()
     return _store
 
 
