@@ -1,11 +1,13 @@
 """TaskboardStore — SQLite persistence layer for the taskboard.
 
-Thread-safe connection via threading.local(), WAL mode, context manager
-lifecycle, and full CRUD + analytics + CSV export over the existing schema.
+Thread-safe connection via threading.local() with automatic cleanup,
+WAL mode, context manager lifecycle, and full CRUD + analytics + CSV
+export over the existing schema.
 """
 
 from __future__ import annotations
 
+import atexit
 import csv
 import io
 import json
@@ -15,11 +17,30 @@ import threading
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
+# Track all live connections so atexit can close them.
+_connections_lock = threading.Lock()
+_connections: list[sqlite3.Connection] = []
+
+
+def _close_all_connections() -> None:
+    """atexit handler — close every connection across all threads."""
+    with _connections_lock:
+        for conn in _connections:
+            try:
+                conn.close()
+            except Exception:
+                pass
+        _connections.clear()
+
+
+atexit.register(_close_all_connections)
+
 
 class TaskboardStore:
     """Manages thread-local SQLite connections to ~/.taskboard/taskboard.db.
 
     Each thread gets its own connection via ``threading.local()``.
+    Connections are tracked globally and closed at process exit via atexit.
     Safe for use behind MCP servers and web frameworks that dispatch
     to multiple threads.
 
@@ -40,13 +61,26 @@ class TaskboardStore:
         """Open (or reuse) a thread-local connection with WAL, busy_timeout, FK."""
         conn = getattr(self._local, "conn", None)
         if conn is not None:
-            return conn
+            try:
+                conn.execute("SELECT 1")
+                return conn
+            except sqlite3.ProgrammingError:
+                # Connection is stale (thread died and was recycled)
+                with _connections_lock:
+                    try:
+                        _connections.remove(conn)
+                    except ValueError:
+                        pass
+                self._local.conn = None
+
         conn = sqlite3.connect(self._db_path, check_same_thread=False)
         conn.execute("PRAGMA journal_mode = WAL")
         conn.execute("PRAGMA busy_timeout = 5000")
         conn.execute("PRAGMA foreign_keys = ON")
         conn.row_factory = sqlite3.Row
         self._local.conn = conn
+        with _connections_lock:
+            _connections.append(conn)
         return conn
 
     @property
@@ -61,6 +95,11 @@ class TaskboardStore:
         conn = getattr(self._local, "conn", None)
         if conn is not None:
             conn.close()
+            with _connections_lock:
+                try:
+                    _connections.remove(conn)
+                except ValueError:
+                    pass
             self._local.conn = None
 
     # ── Helpers ──────────────────────────────────────────────────────
