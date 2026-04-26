@@ -3,155 +3,191 @@
 {% block title %}{% if project %}{{ project.display_name or project.name }}{% else %}Project Not Found{% endif %} — Taskboard{% endblock %}
 
 {% block content %}
-<div class="page-header">
+<div class="container">
     {% if project %}
-    <div>
-        <h1>{{ project.display_name or project.name }}</h1>
-        <p class="project-meta">{{ project.slug }} &middot; {{ project.origin }} &middot; {{ project.path }}</p>
-    </div>
-    {% else %}
-    <div>
-        <h1>Project Not Found</h1>
-        <p class="empty-state">The project <strong>{{ slug }}</strong> does not exist.</p>
-    </div>
-    {% endif %}
-    <a href="/projects" class="btn btn-secondary btn-sm">&larr; All Projects</a>
-</div>
+    <!-- Breadcrumb -->
+    <nav class="breadcrumb">
+        <a href="/">Dashboard</a> &raquo;
+        <a href="/projects">Proyectos</a> &raquo;
+        <span>{{ project.display_name or project.name }}</span>
+    </nav>
 
-{% if project %}
-<!-- Filter Buttons -->
-<section class="filter-bar">
-    <button
-        class="btn {% if not status_filter %}btn-primary{% else %}btn-secondary{% endif %}"
-        hx-get="/projects/{{ slug }}"
-        hx-target="#task-list"
-        hx-push-url="/projects/{{ slug }}"
-        hx-indicator="#filter-spinner"
-    >All</button>
-    <button
-        class="btn {% if status_filter == 'todo' %}btn-primary{% else %}btn-secondary{% endif %}"
-        hx-get="/projects/{{ slug }}?status=todo"
-        hx-target="#task-list"
-        hx-push-url="/projects/{{ slug }}?status=todo"
-        hx-indicator="#filter-spinner"
-    >Pending</button>
-    <button
-        class="btn {% if status_filter == 'in_progress' %}btn-primary{% else %}btn-secondary{% endif %}"
-        hx-get="/projects/{{ slug }}?status=in_progress"
-        hx-target="#task-list"
-        hx-push-url="/projects/{{ slug }}?status=in_progress"
-        hx-indicator="#filter-spinner"
-    >In Progress</button>
-    <button
-        class="btn {% if status_filter == 'blocked' %}btn-primary{% else %}btn-secondary{% endif %}"
-        hx-get="/projects/{{ slug }}?status=blocked"
-        hx-target="#task-list"
-        hx-push-url="/projects/{{ slug }}?status=blocked"
-        hx-indicator="#filter-spinner"
-    >Blocked</button>
-    <button
-        class="btn {% if status_filter == 'done' %}btn-primary{% else %}btn-secondary{% endif %}"
-        hx-get="/projects/{{ slug }}?status=done"
-        hx-target="#task-list"
-        hx-push-url="/projects/{{ slug }}?status=done"
-        hx-indicator="#filter-spinner"
-    >Done</button>
-    <button
-        class="btn {% if status_filter == 'cancelled' %}btn-primary{% else %}btn-secondary{% endif %}"
-        hx-get="/projects/{{ slug }}?status=cancelled"
-        hx-target="#task-list"
-        hx-push-url="/projects/{{ slug }}?status=cancelled"
-        hx-indicator="#filter-spinner"
-    >Cancelled</button>
-    <span id="filter-spinner" class="htmx-indicator spinner"></span>
-</section>
-
-<!-- Task Table -->
-<section id="task-list">
-    {% if tasks %}
-    <table class="task-table">
-        <thead>
-            <tr>
-                <th>ID</th>
-                <th>Title</th>
-                <th>Type</th>
-                <th class="sortable {% if sort_by == 'status' %}active{% endif %}">
-                    <button hx-get="/projects/{{ slug }}?sort=status&dir={% if sort_by == 'status' and sort_dir == 'DESC' %}ASC{% else %}DESC{% endif %}{% if status_filter %}&status={{ status_filter }}{% endif %}"
-                            hx-target="#task-list" hx-push-url="true">
-                        Status{% if sort_by == 'status' %} {% if sort_dir == 'ASC' %}▲{% else %}▼{% endif %}{% endif %}
-                    </button>
-                </th>
-                <th class="sortable {% if sort_by == 'priority' %}active{% endif %}">
-                    <button hx-get="/projects/{{ slug }}?sort=priority&dir={% if sort_by == 'priority' and sort_dir == 'DESC' %}ASC{% else %}DESC{% endif %}{% if status_filter %}&status={{ status_filter }}{% endif %}"
-                            hx-target="#task-list" hx-push-url="true">
-                        Priority{% if sort_by == 'priority' %} {% if sort_dir == 'ASC' %}▲{% else %}▼{% endif %}{% endif %}
-                    </button>
-                </th>
-                <th class="sortable {% if sort_by == 'created_at' %}active{% endif %}">
-                    <button hx-get="/projects/{{ slug }}?sort=created_at&dir={% if sort_by == 'created_at' and sort_dir == 'DESC' %}ASC{% else %}DESC{% endif %}{% if status_filter %}&status={{ status_filter }}{% endif %}"
-                            hx-target="#task-list" hx-push-url="true">
-                        Created{% if sort_by == 'created_at' %} {% if sort_dir == 'ASC' %}▲{% else %}▼{% endif %}{% endif %}
-                    </button>
-                </th>
-                <th class="sortable {% if sort_by == 'completed_at' %}active{% endif %}">
-                    <button hx-get="/projects/{{ slug }}?sort=completed_at&dir={% if sort_by == 'completed_at' and sort_dir == 'DESC' %}ASC{% else %}DESC{% endif %}{% if status_filter %}&status={{ status_filter }}{% endif %}"
-                            hx-target="#task-list" hx-push-url="true">
-                        Completed{% if sort_by == 'completed_at' %} {% if sort_dir == 'ASC' %}▲{% else %}▼{% endif %}{% endif %}
-                    </button>
-                </th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for task in tasks %}
-            <tr>
-                <td><a href="/tasks/{{ task.task_id }}">{{ task.task_id }}</a></td>
-                <td>{{ task.title }}</td>
-                <td>{{ task.type }}</td>
-                <td><span class="badge badge-{{ task.status }}">{{ task.status }}</span></td>
-                <td>{{ task.priority }}</td>
-                <td>{{ task.created_at }}</td>
-                <td>{{ task.completed_at or "—" }}</td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-    {% else %}
-    <p class="empty-state">No tasks found{% if status_filter %} with status "{{ status_filter }}"{% endif %}.</p>
-    {% endif %}
-</section>
-
-<!-- Add Task Form -->
-<section class="add-task-section">
-    <h2>Add Task</h2>
-    <form
-        hx-post="/actions/tasks"
-        hx-target="#add-task-result"
-        class="form"
-    >
-        <input type="hidden" name="project" value="{{ project.name }}">
-        <div class="form-row">
-            <input type="text" name="title" placeholder="Task title" required class="input">
-            <select name="type" class="input">
-                <option value="chore">chore</option>
-                <option value="feature">feature</option>
-                <option value="bugfix">bugfix</option>
-                <option value="refactor">refactor</option>
-                <option value="config">config</option>
-                <option value="docs">docs</option>
-                <option value="testing">testing</option>
-                <option value="infra">infra</option>
-            </select>
-            <select name="priority" class="input">
-                <option value="medium">medium</option>
-                <option value="low">low</option>
-                <option value="high">high</option>
-                <option value="urgent">urgent</option>
-            </select>
-            <button type="submit" class="btn btn-primary" hx-indicator="#add-spinner">Add Task</button>
-            <span id="add-spinner" class="htmx-indicator spinner"></span>
+    <div class="task-view-header">
+        <div class="task-title-group">
+            <span class="task-id-label">{{ project.slug }}</span>
+            <h1>{{ project.display_name or project.name }}</h1>
         </div>
-        <div id="add-task-result"></div>
-    </form>
-</section>
-{% endif %}
+        
+        <div class="header-actions">
+            <a href="/projects" class="btn btn-secondary btn-sm">&larr; Ver todos</a>
+        </div>
+    </div>
+    
+    <p class="project-meta-top">{{ project.origin }} &middot; {{ project.path }}</p>
+
+    <!-- Add Task Form (Moved to Top) -->
+    <section class="add-task-section card">
+        <h2 class="card-title">Agregar nueva tarea</h2>
+        <form
+            hx-post="/actions/tasks"
+            hx-target="#add-task-result"
+            hx-on::response-error="alert('Error al agregar la tarea')"
+            class="form"
+        >
+            <input type="hidden" name="project" value="{{ project.name }}">
+            <div class="form-row">
+                <input type="text" name="title" placeholder="Título de la tarea" required class="input input-flex">
+                <div class="select-group">
+                    <span class="select-label">Tipo</span>
+                    <select name="type" class="input">
+                        <option value="chore">chore</option>
+                        <option value="feature">feature</option>
+                        <option value="bugfix">bugfix</option>
+                        <option value="refactor">refactor</option>
+                        <option value="config">config</option>
+                        <option value="docs">docs</option>
+                        <option value="testing">testing</option>
+                        <option value="infra">infra</option>
+                    </select>
+                </div>
+                <div class="select-group">
+                    <span class="select-label">Prioridad</span>
+                    <select name="priority" class="input">
+                        <option value="medium">medium</option>
+                        <option value="low">low</option>
+                        <option value="high">high</option>
+                        <option value="urgent">urgent</option>
+                    </select>
+                </div>
+                <button type="submit" class="btn btn-primary" hx-indicator="#add-spinner">Agregar</button>
+                <span id="add-spinner" class="htmx-indicator spinner"></span>
+            </div>
+            <div id="add-task-result"></div>
+        </form>
+    </section>
+
+    <!-- Filter Buttons -->
+    <section class="filter-bar" hx-on::response-error="alert('Error al filtrar tareas')">
+        <button
+            class="btn {% if not status_filter %}btn-primary{% else %}btn-secondary{% endif %}"
+            hx-get="/projects/{{ slug }}"
+            hx-target="#task-list"
+            hx-select="#task-list"
+            hx-push-url="/projects/{{ slug }}"
+            hx-indicator="#filter-spinner"
+        >All</button>
+        <button
+            class="btn {% if status_filter == 'todo' %}btn-primary{% else %}btn-secondary{% endif %}"
+            hx-get="/projects/{{ slug }}?status=todo"
+            hx-target="#task-list"
+        hx-select="#task-list"
+            hx-push-url="/projects/{{ slug }}?status=todo"
+            hx-indicator="#filter-spinner"
+        >Pending</button>
+        <button
+            class="btn {% if status_filter == 'in_progress' %}btn-primary{% else %}btn-secondary{% endif %}"
+            hx-get="/projects/{{ slug }}?status=in_progress"
+            hx-target="#task-list"
+        hx-select="#task-list"
+            hx-push-url="/projects/{{ slug }}?status=in_progress"
+            hx-indicator="#filter-spinner"
+        >In Progress</button>
+        <button
+            class="btn {% if status_filter == 'blocked' %}btn-primary{% else %}btn-secondary{% endif %}"
+            hx-get="/projects/{{ slug }}?status=blocked"
+            hx-target="#task-list"
+        hx-select="#task-list"
+            hx-push-url="/projects/{{ slug }}?status=blocked"
+            hx-indicator="#filter-spinner"
+        >Blocked</button>
+        <button
+            class="btn {% if status_filter == 'done' %}btn-primary{% else %}btn-secondary{% endif %}"
+            hx-get="/projects/{{ slug }}?status=done"
+            hx-target="#task-list"
+        hx-select="#task-list"
+            hx-push-url="/projects/{{ slug }}?status=done"
+            hx-indicator="#filter-spinner"
+        >Done</button>
+        <button
+            class="btn {% if status_filter == 'cancelled' %}btn-primary{% else %}btn-secondary{% endif %}"
+            hx-get="/projects/{{ slug }}?status=cancelled"
+            hx-target="#task-list"
+        hx-select="#task-list"
+            hx-push-url="/projects/{{ slug }}?status=cancelled"
+            hx-indicator="#filter-spinner"
+        >Cancelled</button>
+        <span id="filter-spinner" class="htmx-indicator spinner"></span>
+    </section>
+
+    <!-- Task Table -->
+    {% block task_list_content %}
+    <section id="task-list">
+        {% if tasks %}
+        <table class="task-table" hx-on::response-error="alert('Error al ordenar tareas')">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Title</th>
+                    <th>Type</th>
+                    <th class="sortable {% if sort_by == 'status' %}active{% endif %}">
+                        <button hx-get="/projects/{{ slug }}?sort=status&dir={% if sort_by == 'status' and sort_dir == 'DESC' %}ASC{% else %}DESC{% endif %}{% if status_filter %}&status={{ status_filter }}{% endif %}"
+                                hx-target="#task-list" 
+                                hx-select="#task-list" 
+                                hx-push-url="true">
+                            Status{% if sort_by == 'status' %} {% if sort_dir == 'ASC' %}▲{% else %}▼{% endif %}{% endif %}
+                        </button>
+                    </th>
+                    <th class="sortable {% if sort_by == 'priority' %}active{% endif %}">
+                        <button hx-get="/projects/{{ slug }}?sort=priority&dir={% if sort_by == 'priority' and sort_dir == 'DESC' %}ASC{% else %}DESC{% endif %}{% if status_filter %}&status={{ status_filter }}{% endif %}"
+                                hx-target="#task-list" 
+                            hx-select="#task-list" 
+                            hx-push-url="true">
+                            Priority{% if sort_by == 'priority' %} {% if sort_dir == 'ASC' %}▲{% else %}▼{% endif %}{% endif %}
+                        </button>
+                    </th>
+                    <th class="sortable {% if sort_by == 'created_at' %}active{% endif %}">
+                        <button hx-get="/projects/{{ slug }}?sort=created_at&dir={% if sort_by == 'created_at' and sort_dir == 'DESC' %}ASC{% else %}DESC{% endif %}{% if status_filter %}&status={{ status_filter }}{% endif %}"
+                                hx-target="#task-list" 
+                            hx-select="#task-list" 
+                            hx-push-url="true">
+                            Created{% if sort_by == 'created_at' %} {% if sort_dir == 'ASC' %}▲{% else %}▼{% endif %}{% endif %}
+                        </button>
+                    </th>
+                    <th class="sortable {% if sort_by == 'completed_at' %}active{% endif %}">
+                        <button hx-get="/projects/{{ slug }}?sort=completed_at&dir={% if sort_by == 'completed_at' and sort_dir == 'DESC' %}ASC{% else %}DESC{% endif %}{% if status_filter %}&status={{ status_filter }}{% endif %}"
+                                hx-target="#task-list" 
+                            hx-select="#task-list" 
+                            hx-push-url="true">
+                            Completed{% if sort_by == 'completed_at' %} {% if sort_dir == 'ASC' %}▲{% else %}▼{% endif %}{% endif %}
+                        </button>
+                    </th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for task in tasks %}
+                <tr>
+                    <td><a href="/tasks/{{ task.task_id }}">{{ task.task_id }}</a></td>
+                    <td>{{ task.title }}</td>
+                    <td>{{ task.type }}</td>
+                    <td><span class="badge badge-{{ task.status }}">{{ task.status }}</span></td>
+                    <td>{{ task.priority }}</td>
+                    <td>{{ task.created_at }}</td>
+                    <td>{{ task.completed_at or "—" }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <p class="empty-state">No tasks found{% if status_filter %} with status "{{ status_filter }}"{% endif %}.</p>
+        {% endif %}
+    </section>
+    {% endblock %}
+
+    {% else %}
+    <div class="page-header">
+        <h1>Proyecto no encontrado</h1>
+        <p class="empty-state">El proyecto <strong>{{ slug }}</strong> no existe.</p>
+    </div>
+    {% endif %}
+</div>
 {% endblock %}
