@@ -33,5 +33,6 @@ uv.lock
 # SDD phases (internal docs, not for distribution)
 sdd-phases/
 
-# Investigation docs
-INVESTIGACION-ENGRAM-CLOUD.md
+# AI tooling (local config, not for distribution)
+.atl/
+.gga/
