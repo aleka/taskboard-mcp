@@ -145,7 +145,7 @@ class TestTaskCrud:
 
     def test_add_task_with_description(self, store):
         t = store.add_task("testproj", "Described task", description="Some details")
-        assert t["notes"] == "Some details"
+        assert t["description"] == "Some details"
 
     def test_task_id_generation_format(self, store):
         t = store.add_task("testproj", "Task 1")
@@ -510,3 +510,121 @@ class TestCsvExport:
         # Should be parseable without errors
         rows = list(csv.reader(io.StringIO(csv_str)))
         assert len(rows) == 3  # header + 2 data rows
+
+
+# ── Task Neighbors ──────────────────────────────────────────────────
+
+
+class TestTaskNeighbors:
+    """get_task_neighbors() — prev/next navigation within same project."""
+
+    def test_middle_task_has_both_neighbors(self, store):
+        """A task in the middle of 3 tasks should have both prev and next."""
+        t1 = store.add_task("testproj", "First task")
+        t2 = store.add_task("testproj", "Second task")
+        store.add_task("testproj", "Third task")
+        neighbors = store.get_task_neighbors(t2["task_id"])
+        assert neighbors is not None
+        assert neighbors["prev"] == t1["task_id"]
+        assert neighbors["next"] == "tp_003"
+
+    def test_first_task_only_has_next(self, store):
+        """The first (oldest) task in a project should only have next."""
+        t1 = store.add_task("testproj", "First")
+        store.add_task("testproj", "Second")
+        neighbors = store.get_task_neighbors(t1["task_id"])
+        assert neighbors is not None
+        assert neighbors["prev"] is None
+        assert neighbors["next"] == "tp_002"
+
+    def test_last_task_only_has_prev(self, store):
+        """The last (newest) task in a project should only have prev."""
+        store.add_task("testproj", "First")
+        t2 = store.add_task("testproj", "Second")
+        neighbors = store.get_task_neighbors(t2["task_id"])
+        assert neighbors is not None
+        assert neighbors["prev"] == "tp_001"
+        assert neighbors["next"] is None
+
+    def test_nonexistent_task_returns_none(self, store):
+        """Non-existent task_id should return None."""
+        assert store.get_task_neighbors("nonexistent_999") is None
+
+    def test_single_task_has_no_neighbors(self, store):
+        """A project with a single task should have both neighbors as None."""
+        t = store.add_task("testproj", "Only task")
+        neighbors = store.get_task_neighbors(t["task_id"])
+        assert neighbors is not None
+        assert neighbors["prev"] is None
+        assert neighbors["next"] is None
+
+    def test_neighbors_cross_project_isolation(self, store, second_project):
+        """Neighbors should not cross project boundaries."""
+        store.add_task("testproj", "TP task")
+        store.add_task("otherproj", "OP task")
+        tp_neighbors = store.get_task_neighbors("tp_001")
+        op_neighbors = store.get_task_neighbors("op_001")
+        assert tp_neighbors["prev"] is None
+        assert tp_neighbors["next"] is None
+        assert op_neighbors["prev"] is None
+        assert op_neighbors["next"] is None
+
+
+# ── list_tasks Sorting ─────────────────────────────────────────────
+
+
+class TestListTasksSorting:
+    """list_tasks() order_by / order_dir parameters."""
+
+    def test_default_sort_is_created_at_desc(self, store):
+        """Without sort params, tasks should be ordered by created_at DESC."""
+        store.add_task("testproj", "First")
+        store.add_task("testproj", "Second")
+        store.add_task("testproj", "Third")
+        tasks = store.list_tasks()
+        # Most recently created should be first
+        assert tasks[0]["title"] == "Third"
+        assert tasks[2]["title"] == "First"
+
+    def test_sort_by_priority_asc(self, store):
+        """Sorting by priority ASC should return alphabetical order."""
+        store.add_task("testproj", "High task", priority="high")
+        store.add_task("testproj", "Low task", priority="low")
+        store.add_task("testproj", "Urgent task", priority="urgent")
+        store.add_task("testproj", "Medium task", priority="medium")
+        tasks = store.list_tasks(order_by="priority", order_dir="ASC")
+        priorities = [t["priority"] for t in tasks]
+        assert priorities == ["high", "low", "medium", "urgent"]
+
+    def test_sort_by_status_desc(self, seeded_store):
+        """Sorting by status DESC should reverse alphabetical order."""
+        store, *_ = seeded_store
+        tasks = store.list_tasks(order_by="status", order_dir="DESC")
+        statuses = [t["status"] for t in tasks]
+        # Verify descending: each status >= the next one alphabetically
+        for i in range(len(statuses) - 1):
+            assert statuses[i] >= statuses[i + 1]
+
+    def test_sort_by_completed_at_asc(self, store):
+        """Sorting by completed_at ASC should put earliest completions first."""
+        t1 = store.add_task("testproj", "Done first")
+        t2 = store.add_task("testproj", "Done second")
+        store.complete_task(t1["task_id"])
+        store.complete_task(t2["task_id"])
+        tasks = store.list_tasks(
+            status="done", order_by="completed_at", order_dir="ASC",
+        )
+        assert tasks[0]["task_id"] == t1["task_id"]
+        assert tasks[1]["task_id"] == t2["task_id"]
+
+    def test_invalid_order_by_falls_back_to_created_at(self, store):
+        """An invalid order_by value should silently fall back to created_at."""
+        store.add_task("testproj", "A task")
+        tasks = store.list_tasks(order_by="totally_invalid_column")
+        assert len(tasks) == 1
+
+    def test_invalid_order_dir_falls_back_to_desc(self, store):
+        """An invalid order_dir value should silently fall back to DESC."""
+        store.add_task("testproj", "A task")
+        tasks = store.list_tasks(order_dir="SIDEWAYS")
+        assert len(tasks) == 1

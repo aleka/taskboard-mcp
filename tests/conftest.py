@@ -136,7 +136,7 @@ def _init_schema(conn: sqlite3.Connection) -> None:
           git_branch TEXT,
           summary TEXT NOT NULL DEFAULT '',
           tags TEXT NOT NULL DEFAULT '[]',
-          notes TEXT NOT NULL DEFAULT '',
+          description TEXT NOT NULL DEFAULT '',
           FOREIGN KEY (project_name) REFERENCES projects(name) ON UPDATE CASCADE
         );
 

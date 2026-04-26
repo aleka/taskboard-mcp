@@ -17,4 +17,4 @@ RULES_FILE="AGENTS.md"
 STRICT_MODE="true"
 
 # Timeout for AI response
-TIMEOUT="120"
+TIMEOUT="300"

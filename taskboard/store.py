@@ -16,7 +16,7 @@ import json
 import os
 import sqlite3
 import threading
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from typing import Any
 
 
@@ -40,6 +40,11 @@ class TaskboardStore:
     _write_lock = threading.Lock()
 
     def __init__(self, db_path: str = "~/.taskboard/taskboard.db") -> None:
+        """Open the SQLite store at *db_path* (expanded via ``os.path.expanduser``).
+
+        For in-memory testing, pass ``":memory:"`` and set
+        ``_persistent_conn`` externally.
+        """
         self._db_path = os.path.expanduser(db_path)
         # For in-memory testing: hold a persistent connection so :memory: data
         # survives across calls. Production code leaves this as None.
@@ -103,6 +108,7 @@ class TaskboardStore:
         path: str = "",
         tags: list[str] | None = None,
     ) -> dict[str, Any]:
+        """Create a new project. Raises ``ValueError`` on duplicate name/slug."""
         tags_json = json.dumps(tags or [])
         with self._write_lock:
             conn = self._connect()
@@ -122,6 +128,7 @@ class TaskboardStore:
         return self.get_project(slug)  # type: ignore[return-value]
 
     def get_project(self, slug: str) -> dict[str, Any] | None:
+        """Return a project dict by slug, or ``None`` if not found."""
         conn = self._connect()
         try:
             row = conn.execute(
@@ -143,6 +150,7 @@ class TaskboardStore:
             self._close(conn)
 
     def list_projects(self) -> list[dict[str, Any]]:
+        """Return all projects sorted by name."""
         conn = self._connect()
         try:
             rows = conn.execute(
@@ -164,16 +172,18 @@ class TaskboardStore:
         priority: str = "medium",
         source: str = "manual",
     ) -> dict[str, Any]:
+        """Create a new task with auto-generated ``{slug}_{NNN}`` ID."""
         tags_json = json.dumps(tags or [])
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         with self._write_lock:
             conn = self._connect()
             try:
                 task_id = self._generate_task_id(conn, project)
                 conn.execute(
                     "INSERT INTO tasks "
-                    "(task_id, title, type, project_name, status, source, priority, summary, tags, notes) "
-                    "VALUES (?, ?, ?, ?, 'todo', ?, ?, '', ?, ?)",
-                    (task_id, title, type, project, source, priority, tags_json, description),
+                    "(task_id, title, type, project_name, status, source, priority, summary, tags, description, created_at) "
+                    "VALUES (?, ?, ?, ?, 'todo', ?, ?, '', ?, ?, ?)",
+                    (task_id, title, type, project, source, priority, tags_json, description, now),
                 )
                 conn.execute(
                     "INSERT INTO task_history (task_id, from_status, to_status, note, git_commit) "
@@ -186,6 +196,7 @@ class TaskboardStore:
         return self.get_task(task_id)  # type: ignore[return-value]
 
     def get_task(self, task_id: str) -> dict[str, Any] | None:
+        """Return a task dict by ID, or ``None`` if not found."""
         conn = self._connect()
         try:
             row = conn.execute(
@@ -194,6 +205,51 @@ class TaskboardStore:
             return self._row_to_dict(row) if row else None
         finally:
             self._close(conn)
+
+    def get_task_neighbors(self, task_id: str) -> dict[str, str | None] | None:
+        """Return prev/next task IDs for navigation within the same project.
+
+        Uses created_at ordering (with ``id`` as tiebreaker when timestamps
+        match) to determine adjacency.
+        Returns ``{"prev": "xx_NNN" | None, "next": "xx_NNN" | None}``
+        or ``None`` if task_id doesn't exist.
+        """
+        conn = self._connect()
+        try:
+            current = conn.execute(
+                "SELECT project_name, created_at, id FROM tasks WHERE task_id = ?",
+                (task_id,),
+            ).fetchone()
+            if current is None:
+                return None
+
+            project_name = current["project_name"]
+            created_at = current["created_at"]
+            row_id = current["id"]
+
+            prev_row = conn.execute(
+                "SELECT task_id FROM tasks "
+                "WHERE project_name = ? AND (created_at < ? OR (created_at = ? AND id < ?)) "
+                "ORDER BY created_at DESC, id DESC LIMIT 1",
+                (project_name, created_at, created_at, row_id),
+            ).fetchone()
+
+            next_row = conn.execute(
+                "SELECT task_id FROM tasks "
+                "WHERE project_name = ? AND (created_at > ? OR (created_at = ? AND id > ?)) "
+                "ORDER BY created_at ASC, id ASC LIMIT 1",
+                (project_name, created_at, created_at, row_id),
+            ).fetchone()
+
+            return {
+                "prev": prev_row["task_id"] if prev_row else None,
+                "next": next_row["task_id"] if next_row else None,
+            }
+        finally:
+            self._close(conn)
+
+    _ALLOWED_ORDER = {"created_at", "completed_at", "status", "priority", "type", "title"}
+    _ALLOWED_DIR = {"ASC", "DESC"}
 
     def list_tasks(
         self,
@@ -204,7 +260,20 @@ class TaskboardStore:
         to_date: str | None = None,
         limit: int = 100,
         offset: int = 0,
+        order_by: str = "created_at",
+        order_dir: str = "DESC",
     ) -> list[dict[str, Any]]:
+        """Return tasks matching filters, sorted by *order_by* column.
+
+        Parameters ``order_by`` and ``order_dir`` are validated against
+        hardcoded whitelists to prevent SQL injection — they are
+        interpolated into the ORDER BY clause, NOT parameterised.
+        """
+        if order_by not in self._ALLOWED_ORDER:
+            order_by = "created_at"
+        if order_dir not in self._ALLOWED_DIR:
+            order_dir = "DESC"
+
         clauses: list[str] = []
         params: list[Any] = []
 
@@ -230,7 +299,7 @@ class TaskboardStore:
         conn = self._connect()
         try:
             rows = conn.execute(
-                f"SELECT * FROM tasks{where} ORDER BY created_at DESC LIMIT ? OFFSET ?",
+                f"SELECT * FROM tasks{where} ORDER BY {order_by} {order_dir} LIMIT ? OFFSET ?",
                 params,
             ).fetchall()
             return [self._row_to_dict(r) for r in rows]
@@ -240,6 +309,7 @@ class TaskboardStore:
     def update_task_status(
         self, task_id: str, status: str, note: str = ""
     ) -> dict[str, Any]:
+        """Change task status and record a history entry."""
         with self._write_lock:
             conn = self._connect()
             try:
@@ -268,6 +338,7 @@ class TaskboardStore:
         summary: str = "",
         git_commit: str | None = None,
     ) -> dict[str, Any]:
+        """Mark a task as done, set completed_at, and record history."""
         with self._write_lock:
             conn = self._connect()
             try:
@@ -277,7 +348,7 @@ class TaskboardStore:
                 if row is None:
                     raise ValueError(f"Task '{task_id}' not found")
                 old_status = row["status"]
-                now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+                now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 conn.execute(
                     "UPDATE tasks SET status = 'done', completed_at = ?, summary = ?, "
                     "git_commit = COALESCE(?, git_commit) WHERE task_id = ?",
@@ -294,6 +365,7 @@ class TaskboardStore:
         return self.get_task(task_id)  # type: ignore[return-value]
 
     def delete_task(self, task_id: str) -> bool:
+        """Delete a task. Returns ``True`` if deleted, ``False`` if not found."""
         with self._write_lock:
             conn = self._connect()
             try:
@@ -442,7 +514,7 @@ class TaskboardStore:
 
     def get_recent_activity(self, days: int = 7) -> list[dict[str, Any]]:
         """Return completed tasks from the last N days."""
-        cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).strftime("%Y-%m-%d")
+        cutoff = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
         conn = self._connect()
         try:
             rows = conn.execute(

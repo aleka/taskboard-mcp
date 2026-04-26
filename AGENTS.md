@@ -28,7 +28,7 @@
 ## Database
 
 - SQLite with WAL mode, busy_timeout 5000ms, foreign_keys ON
-- Status values: `pending`, `in-progress`, `done`, `cancelled` (NOT `completed`)
+- Status values: `todo`, `in_progress`, `blocked`, `done`, `cancelled`
 - Task IDs follow `{slug}_{NNN}` format
 - Use parameterized queries — NEVER string concatenation in SQL
 - Store class uses context manager pattern (`with TaskboardStore() as store`)
