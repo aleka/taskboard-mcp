@@ -12,6 +12,9 @@ from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
 from starlette.applications import Starlette
+from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
+from starlette.requests import Request
+from starlette.responses import Response
 from starlette.routing import Mount, Route
 from starlette.staticfiles import StaticFiles
 from starlette.templating import Jinja2Templates
@@ -24,6 +27,9 @@ _WEB_DIR = os.path.dirname(__file__)
 _TEMPLATES_DIR = os.path.join(_WEB_DIR, "templates")
 _STATIC_DIR = os.path.join(_WEB_DIR, "static")
 
+# Cache-Control max-age for static assets (24 hours)
+_STATIC_CACHE_MAX_AGE = 86400
+
 
 @asynccontextmanager
 async def lifespan(app: Starlette) -> AsyncGenerator[None, None]:
@@ -32,6 +38,25 @@ async def lifespan(app: Starlette) -> AsyncGenerator[None, None]:
     store._connect()
     yield
     store.__exit__(None, None, None)
+
+
+class StaticCacheMiddleware(BaseHTTPMiddleware):
+    """Add Cache-Control headers to static asset responses.
+
+    Starlette's StaticFiles does not set cache headers by default.
+    This middleware adds ``Cache-Control: public, max-age=86400`` to
+    responses whose path starts with ``/static/``.
+    """
+
+    async def dispatch(
+        self, request: Request, call_next: RequestResponseEndpoint
+    ) -> Response:
+        response = await call_next(request)
+        if request.url.path.startswith("/static/"):
+            response.headers["Cache-Control"] = (
+                f"public, max-age={_STATIC_CACHE_MAX_AGE}"
+            )
+        return response
 
 
 def create_app(store: TaskboardStore | None = None) -> Starlette:
@@ -105,6 +130,7 @@ def create_app(store: TaskboardStore | None = None) -> Starlette:
     ]
 
     app = Starlette(routes=routes, lifespan=lifespan)
+    app.add_middleware(StaticCacheMiddleware)
 
     # Inject shared dependencies into app.state for route handlers
     app.state.store = store
