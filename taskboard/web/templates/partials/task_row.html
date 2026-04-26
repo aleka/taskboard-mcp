@@ -18,7 +18,8 @@
             hx-post="/actions/tasks/{{ task.task_id }}/complete"
             hx-target="#task-{{ task.task_id }}"
             hx-swap="outerHTML"
-        >✓</button>
+            hx-indicator="#complete-spinner-{{ task.task_id }}"
+        >✓<span id="complete-spinner-{{ task.task_id }}" class="htmx-indicator"></span></button>
         {% endif %}
         {% if task.status == 'todo' %}
         <button
@@ -27,7 +28,8 @@
             hx-vals='{"status": "in_progress"}'
             hx-target="#task-{{ task.task_id }}"
             hx-swap="outerHTML"
-        >▶</button>
+            hx-indicator="#status-spinner-{{ task.task_id }}"
+        >▶<span id="status-spinner-{{ task.task_id }}" class="htmx-indicator"></span></button>
         {% endif %}
     </td>
 </tr>
