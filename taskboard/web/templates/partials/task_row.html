@@ -1,7 +1,7 @@
 {# task_row.html — Single task table row fragment (HTMX partial) #}
 <tr class="task-row" id="task-{{ task.task_id }}">
     <td>
-        <a href="/projects/{{ task.project_name }}">{{ task.task_id }}</a>
+        <a href="/tasks/{{ task.task_id }}">{{ task.task_id }}</a>
     </td>
     <td>{{ task.title }}</td>
     <td>{{ task.type }}</td>

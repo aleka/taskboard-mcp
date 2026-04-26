@@ -86,6 +86,7 @@ def create_app(store: TaskboardStore | None = None) -> Starlette:
         Route("/", pages.dashboard, name="dashboard"),
         Route("/projects", pages.project_list, name="projects"),
         Route("/projects/{slug:path}", pages.project_detail, name="project-detail"),
+        Route("/tasks/{task_id}", pages.task_detail, name="task-detail"),
         Route("/timeline", pages.timeline_view, name="timeline"),
         Route("/reports", pages.reports_view, name="reports"),
 
@@ -94,6 +95,8 @@ def create_app(store: TaskboardStore | None = None) -> Starlette:
         Route("/partials/task-row/{task_id}", partials.task_row, name="partial-task-row"),
         Route("/partials/metrics", partials.metrics_cards, name="partial-metrics"),
         Route("/partials/timeline-group", partials.timeline_group, name="partial-timeline"),
+        Route("/partials/project-cards", partials.project_cards, name="partial-project-cards"),
+        Route("/partials/recent-activity", partials.recent_activity, name="partial-recent-activity"),
 
         # ── HTMX actions (form-encoded POST, returns HTML) ──
         Route("/actions/tasks", actions.add_task, methods=["POST"], name="action-add-task"),

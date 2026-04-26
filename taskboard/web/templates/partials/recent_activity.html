@@ -1,0 +1,25 @@
+{# recent_activity.html — Recent activity table fragment (HTMX partial, no extends) #}
+{% if recent_tasks %}
+<table class="task-table">
+    <thead>
+        <tr>
+            <th>Task</th>
+            <th>Project</th>
+            <th>Type</th>
+            <th>Completed</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for task in recent_tasks %}
+        <tr>
+            <td><a href="/tasks/{{ task.task_id }}">{{ task.task_id }}</a> — {{ task.title }}</td>
+            <td><a href="/projects/{{ project_slugs.get(task.project_name, task.project_name) }}">{{ task.project_name }}</a></td>
+            <td>{{ task.type }}</td>
+            <td>{{ task.completed_at }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<p class="empty-state">No recent activity in the last 7 days.</p>
+{% endif %}

@@ -75,16 +75,36 @@
                 <th>ID</th>
                 <th>Title</th>
                 <th>Type</th>
-                <th>Status</th>
-                <th>Priority</th>
-                <th>Created</th>
-                <th>Completed</th>
+                <th class="sortable {% if sort_by == 'status' %}active{% endif %}">
+                    <button hx-get="/projects/{{ slug }}?sort=status&dir={% if sort_by == 'status' and sort_dir == 'DESC' %}ASC{% else %}DESC{% endif %}{% if status_filter %}&status={{ status_filter }}{% endif %}"
+                            hx-target="#task-list" hx-push-url="true">
+                        Status{% if sort_by == 'status' %} {% if sort_dir == 'ASC' %}▲{% else %}▼{% endif %}{% endif %}
+                    </button>
+                </th>
+                <th class="sortable {% if sort_by == 'priority' %}active{% endif %}">
+                    <button hx-get="/projects/{{ slug }}?sort=priority&dir={% if sort_by == 'priority' and sort_dir == 'DESC' %}ASC{% else %}DESC{% endif %}{% if status_filter %}&status={{ status_filter }}{% endif %}"
+                            hx-target="#task-list" hx-push-url="true">
+                        Priority{% if sort_by == 'priority' %} {% if sort_dir == 'ASC' %}▲{% else %}▼{% endif %}{% endif %}
+                    </button>
+                </th>
+                <th class="sortable {% if sort_by == 'created_at' %}active{% endif %}">
+                    <button hx-get="/projects/{{ slug }}?sort=created_at&dir={% if sort_by == 'created_at' and sort_dir == 'DESC' %}ASC{% else %}DESC{% endif %}{% if status_filter %}&status={{ status_filter }}{% endif %}"
+                            hx-target="#task-list" hx-push-url="true">
+                        Created{% if sort_by == 'created_at' %} {% if sort_dir == 'ASC' %}▲{% else %}▼{% endif %}{% endif %}
+                    </button>
+                </th>
+                <th class="sortable {% if sort_by == 'completed_at' %}active{% endif %}">
+                    <button hx-get="/projects/{{ slug }}?sort=completed_at&dir={% if sort_by == 'completed_at' and sort_dir == 'DESC' %}ASC{% else %}DESC{% endif %}{% if status_filter %}&status={{ status_filter }}{% endif %}"
+                            hx-target="#task-list" hx-push-url="true">
+                        Completed{% if sort_by == 'completed_at' %} {% if sort_dir == 'ASC' %}▲{% else %}▼{% endif %}{% endif %}
+                    </button>
+                </th>
             </tr>
         </thead>
         <tbody>
             {% for task in tasks %}
             <tr>
-                <td>{{ task.task_id }}</td>
+                <td><a href="/tasks/{{ task.task_id }}">{{ task.task_id }}</a></td>
                 <td>{{ task.title }}</td>
                 <td>{{ task.type }}</td>
                 <td><span class="badge badge-{{ task.status }}">{{ task.status }}</span></td>

@@ -1,0 +1,141 @@
+{% extends "base.html" %}
+
+{% block title %}{% if task %}{{ task.task_id }} — {{ task.title }}{% else %}Task Not Found{% endif %} — Taskboard{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    {% if task %}
+    <div>
+        <h1>{{ task.task_id }} — {{ task.title }}</h1>
+        <p class="task-meta">
+            <span class="badge badge-{{ task.status }}">{{ task.status }}</span>
+            <span class="badge badge-type">{{ task.type }}</span>
+            <span class="badge badge-priority-{{ task.priority }}">{{ task.priority }}</span>
+        </p>
+    </div>
+    <div class="nav-buttons">
+        {% if neighbors and neighbors.prev %}
+        <a href="/tasks/{{ neighbors.prev }}" class="btn btn-secondary btn-sm">&larr; {{ neighbors.prev }}</a>
+        {% endif %}
+        {% if neighbors and neighbors.next %}
+        <a href="/tasks/{{ neighbors.next }}" class="btn btn-secondary btn-sm">{{ neighbors.next }} &rarr;</a>
+        {% endif %}
+    </div>
+    {% else %}
+    <div>
+        <h1>Task Not Found</h1>
+        <p class="empty-state">The task <strong>{{ task_id }}</strong> does not exist.</p>
+    </div>
+    {% endif %}
+    <a href="/" class="btn btn-secondary btn-sm">&larr; Dashboard</a>
+</div>
+
+{% if task %}
+<!-- Breadcrumb -->
+<nav class="breadcrumb">
+    <a href="/">Dashboard</a> &raquo;
+    {% if project %}
+    <a href="/projects/{{ project.slug }}">{{ project.display_name or project.name }}</a> &raquo;
+    {% else %}
+    {{ task.project_name }} &raquo;
+    {% endif %}
+    <span>{{ task.task_id }}</span>
+</nav>
+
+<!-- Task Details Card -->
+<section class="task-detail-card">
+    <table class="detail-table">
+        <tbody>
+            <tr>
+                <th>task_id</th>
+                <td>{{ task.task_id }}</td>
+            </tr>
+            <tr>
+                <th>title</th>
+                <td>{{ task.title }}</td>
+            </tr>
+            <tr>
+                <th>type</th>
+                <td>{{ task.type }}</td>
+            </tr>
+            <tr>
+                <th>status</th>
+                <td><span class="badge badge-{{ task.status }}">{{ task.status }}</span></td>
+            </tr>
+            <tr>
+                <th>priority</th>
+                <td><span class="badge badge-priority-{{ task.priority }}">{{ task.priority }}</span></td>
+            </tr>
+            <tr>
+                <th>source</th>
+                <td>{{ task.source }}</td>
+            </tr>
+            <tr>
+                <th>project</th>
+                <td>
+                    {% if project %}
+                    <a href="/projects/{{ project.slug }}">{{ project.display_name or project.name }}</a>
+                    {% else %}
+                    {{ task.project_name }}
+                    {% endif %}
+                </td>
+            </tr>
+            <tr>
+                <th>created_at</th>
+                <td>{{ task.created_at }}</td>
+            </tr>
+            <tr>
+                <th>completed_at</th>
+                <td>{{ task.completed_at or "&mdash;" }}</td>
+            </tr>
+            {% if task.git_commit %}
+            <tr>
+                <th>git_commit</th>
+                <td><code>{{ task.git_commit }}</code></td>
+            </tr>
+            {% endif %}
+            {% if task.git_branch %}
+            <tr>
+                <th>git_branch</th>
+                <td><code>{{ task.git_branch }}</code></td>
+            </tr>
+            {% endif %}
+            {% if task.description %}
+            <tr>
+                <th>description</th>
+                <td class="long-text">{{ task.description }}</td>
+            </tr>
+            {% endif %}
+            {% if task.summary %}
+            <tr>
+                <th>summary</th>
+                <td class="long-text">{{ task.summary }}</td>
+            </tr>
+            {% endif %}
+            <tr>
+                <th>tags</th>
+                <td>
+                    {% if tags and tags|length > 0 %}
+                    {% for tag in tags %}
+                    <span class="badge badge-tag">{{ tag }}</span>
+                    {% endfor %}
+                    {% else %}
+                    <span class="empty-value">[]</span>
+                    {% endif %}
+                </td>
+            </tr>
+        </tbody>
+    </table>
+</section>
+
+<!-- Navigation -->
+<section class="task-nav">
+    {% if neighbors and neighbors.prev %}
+    <a href="/tasks/{{ neighbors.prev }}" class="btn btn-secondary">&larr; Anterior: {{ neighbors.prev }}</a>
+    {% endif %}
+    {% if neighbors and neighbors.next %}
+    <a href="/tasks/{{ neighbors.next }}" class="btn btn-secondary">Siguiente: {{ neighbors.next }} &rarr;</a>
+    {% endif %}
+</section>
+{% endif %}
+{% endblock %}

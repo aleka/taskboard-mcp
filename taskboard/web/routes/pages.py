@@ -5,6 +5,8 @@ All handlers access the store and templates via ``request.app.state``.
 
 from __future__ import annotations
 
+import json
+
 from starlette.requests import Request
 from starlette.responses import HTMLResponse
 from starlette.templating import Jinja2Templates
@@ -82,10 +84,14 @@ async def project_detail(request: Request) -> HTMLResponse:
         )
 
     status_filter = request.query_params.get("status", "")
+    sort_by = request.query_params.get("sort", "created_at")
+    sort_dir = request.query_params.get("dir", "DESC")
     tasks = store.list_tasks(
         project=project["name"],
         status=status_filter or None,
         limit=500,
+        order_by=sort_by,
+        order_dir=sort_dir,
     )
 
     return templates.TemplateResponse(
@@ -96,6 +102,45 @@ async def project_detail(request: Request) -> HTMLResponse:
             "tasks": tasks,
             "slug": slug,
             "status_filter": status_filter,
+            "sort_by": sort_by,
+            "sort_dir": sort_dir,
+        },
+    )
+
+
+# ── Task Detail ────────────────────────────────────────────────────
+
+
+async def task_detail(request: Request) -> HTMLResponse:
+    """GET /tasks/{task_id} — full task detail with prev/next navigation."""
+    store = _get_store(request)
+    templates = _get_templates(request)
+
+    task_id = request.path_params["task_id"]
+    task = store.get_task(task_id)
+
+    if task is None:
+        return templates.TemplateResponse(
+            request,
+            "task_detail.html",
+            {"task": None, "task_id": task_id, "project": None, "neighbors": None},
+            status_code=404,
+        )
+
+    project = store.get_project_by_name(task["project_name"])
+    neighbors = store.get_task_neighbors(task_id)
+
+    tags = json.loads(task.get("tags", "[]")) if task.get("tags") else []
+
+    return templates.TemplateResponse(
+        request,
+        "task_detail.html",
+        {
+            "task": task,
+            "task_id": task_id,
+            "project": project,
+            "neighbors": neighbors,
+            "tags": tags,
         },
     )
 

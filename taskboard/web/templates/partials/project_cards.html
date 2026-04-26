@@ -1,0 +1,13 @@
+{# project_cards.html — Project grid fragment (HTMX partial, no extends) #}
+{% if projects %}
+<div class="project-grid">
+    {% for project in projects %}
+    <a href="/projects/{{ project.slug }}" class="card project-card">
+        <h3>{{ project.display_name or project.name }}</h3>
+        <p class="project-meta">{{ project.slug }} &middot; {{ project.origin }}</p>
+    </a>
+    {% endfor %}
+</div>
+{% else %}
+<p class="empty-state">No projects found.</p>
+{% endif %}

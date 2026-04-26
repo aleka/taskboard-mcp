@@ -106,3 +106,36 @@ async def timeline_group(request: Request) -> HTMLResponse:
         "partials/timeline_group.html",
         {"timeline_data": timeline_data},
     )
+
+
+# ── Project Cards Partial ────────────────────────────────────────────
+
+
+async def project_cards(request: Request) -> HTMLResponse:
+    """GET /partials/project-cards — project grid fragment."""
+    store = _get_store(request)
+    templates = _get_templates(request)
+    projects = store.list_projects()
+    return templates.TemplateResponse(
+        request,
+        "partials/project_cards.html",
+        {"projects": projects},
+    )
+
+
+# ── Recent Activity Partial ──────────────────────────────────────────
+
+
+async def recent_activity(request: Request) -> HTMLResponse:
+    """GET /partials/recent-activity — recent completed tasks fragment."""
+    store = _get_store(request)
+    templates = _get_templates(request)
+    days = int(request.query_params.get("days", "7"))
+    recent_tasks = store.get_recent_activity(days=days)[:10]
+    projects = store.list_projects()
+    project_slugs = {p["name"]: p["slug"] for p in projects}
+    return templates.TemplateResponse(
+        request,
+        "partials/recent_activity.html",
+        {"recent_tasks": recent_tasks, "project_slugs": project_slugs},
+    )
