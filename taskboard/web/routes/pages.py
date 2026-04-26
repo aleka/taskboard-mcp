@@ -30,6 +30,9 @@ async def dashboard(request: Request) -> HTMLResponse:
     projects = store.list_projects()
     recent_tasks = store.get_recent_activity(days=7)[:10]
 
+    # Build name→slug lookup so recent tasks can link to /projects/{slug}
+    project_slugs = {p["name"]: p["slug"] for p in projects}
+
     return templates.TemplateResponse(
         request,
         "dashboard.html",
@@ -37,6 +40,7 @@ async def dashboard(request: Request) -> HTMLResponse:
             "metrics": metrics,
             "projects": projects,
             "recent_tasks": recent_tasks,
+            "project_slugs": project_slugs,
         },
     )
 

@@ -80,7 +80,7 @@
             <tbody>
                 {% for task in recent_tasks %}
                 <tr>
-                    <td><a href="/projects/{{ task.project_name }}">{{ task.task_id }}</a> — {{ task.title }}</td>
+                    <td><a href="/projects/{{ project_slugs.get(task.project_name, task.project_name) }}">{{ task.task_id }}</a> — {{ task.title }}</td>
                     <td>{{ task.project_name }}</td>
                     <td>{{ task.type }}</td>
                     <td>{{ task.completed_at }}</td>
