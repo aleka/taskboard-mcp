@@ -35,7 +35,7 @@ class TaskboardStore:
         """Open (or reuse) a connection with WAL, busy_timeout, FK."""
         if self._conn is not None:
             return self._conn
-        conn = sqlite3.connect(self._db_path)
+        conn = sqlite3.connect(self._db_path, check_same_thread=False)
         conn.execute("PRAGMA journal_mode = WAL")
         conn.execute("PRAGMA busy_timeout = 5000")
         conn.execute("PRAGMA foreign_keys = ON")
