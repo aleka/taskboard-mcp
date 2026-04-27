@@ -1,6 +1,6 @@
 # Herramientas MCP — Referencia completa
 
-10 herramientas disponibles para agentes de IA via MCP (OpenCode, Claude Desktop, etc.). Todas delegan a `TaskboardStore` y devuelven JSON.
+12 herramientas disponibles para agentes de IA via MCP (OpenCode, Claude Desktop, etc.). Todas delegan a `TaskboardStore` y devuelven JSON.
 
 ---
 
@@ -60,6 +60,7 @@ Crea una nueva tarea en un proyecto existente. El status inicial es siempre `tod
 | `title` | `str` | Sí | — | Título de la tarea |
 | `type` | `str` | No | `"chore"` | Tipo de tarea (ver tabla arriba) |
 | `description` | `str` | No | `""` | Descripción o notas |
+| `tags` | `list[str] \| None` | No | `None` | Tags para agrupar (ej: `["refactor-ui", "compliance-fix"]`) |
 | `priority` | `str` | No | `"medium"` | Prioridad de la tarea |
 
 ### Ejemplo de respuesta
@@ -76,7 +77,7 @@ Crea una nueva tarea en un proyecto existente. El status inicial es siempre `tod
     "source": "manual",
     "priority": "medium",
     "summary": "",
-    "tags": "[]",
+    "tags": "[\"ci\", \"infra\"]",
     "notes": "Usar GitHub Actions",
     "git_commit": null,
     "created_at": "2026-04-26 14:30:00",
@@ -90,6 +91,7 @@ Crea una nueva tarea en un proyecto existente. El status inicial es siempre `tod
 - El `task_id` se genera automáticamente con formato `{slug}_{NNN}` (slug del proyecto + número secuencial).
 - El `source` siempre queda en `"manual"` desde MCP (no se pasa como parámetro).
 - Si el proyecto no existe, devuelve `{"status": "error", "message": "..."}`.
+- Los `tags` se almacenan como JSON en la columna `tags`. Útiles para agrupar tareas en métricas (ej: por sprint, por categoría).
 
 ---
 
@@ -252,7 +254,36 @@ Obtiene el detalle completo de una tarea por su ID.
 
 ---
 
-## 6. `add_project` — Registrar proyecto
+## 6. `delete_task` — Eliminar tarea
+
+Elimina una tarea del taskboard (y su historial asociado).
+
+### Parámetros
+
+| Parámetro | Tipo | Requerido | Default | Descripción |
+|-----------|------|-----------|---------|-------------|
+| `task_id` | `str` | Sí | — | ID de la tarea (ej: `"myproj_001"`) |
+
+### Ejemplo de respuesta
+
+```json
+{
+  "status": "success",
+  "data": {
+    "deleted": "myproj_001"
+  }
+}
+```
+
+### Notas
+
+- Si la tarea no existe: `{"status": "error", "message": "Task 'myproj_001' not found"}`.
+- La eliminación es permanente — no hay soft delete ni undo.
+- También elimina las entradas en `task_history` asociadas a la tarea.
+
+---
+
+## 7. `add_project` — Registrar proyecto
 
 Registra un nuevo proyecto en el taskboard.
 
@@ -290,7 +321,7 @@ Registra un nuevo proyecto en el taskboard.
 
 ---
 
-## 7. `list_projects` — Listar proyectos
+## 8. `list_projects` — Listar proyectos
 
 Lista todos los proyectos registrados, ordenados alfabéticamente por nombre.
 
@@ -326,7 +357,39 @@ Ninguno.
 
 ---
 
-## 8. `get_metrics` — Métricas y analytics
+## 9. `delete_project` — Eliminar proyecto
+
+Elimina un proyecto del taskboard. Requiere `force=True` si el proyecto tiene tareas asociadas.
+
+### Parámetros
+
+| Parámetro | Tipo | Requerido | Default | Descripción |
+|-----------|------|-----------|---------|-------------|
+| `name` | `str` | Sí | — | Nombre del proyecto a eliminar |
+| `force` | `bool` | No | `false` | Si `true`, elimina también todas las tareas e historial asociado |
+
+### Ejemplo de respuesta
+
+```json
+{
+  "status": "success",
+  "data": {
+    "deleted": "myproj",
+    "tasks_removed": 3
+  }
+}
+```
+
+### Notas
+
+- Si el proyecto tiene tareas asociadas y `force=False` (default): devuelve error indicando cuántas tareas tiene.
+- Con `force=True`: elimina primero el historial (`task_history`), luego las tareas, y finalmente el proyecto.
+- Si el proyecto no existe: `{"status": "error", "message": "Project 'name' not found"}`.
+- La eliminación es permanente — no hay undo.
+
+---
+
+## 10. `get_metrics` — Métricas y analytics
 
 Obtiene métricas de tareas con filtros opcionales por proyecto y/o rango de fechas.
 
@@ -378,7 +441,7 @@ Obtiene métricas de tareas con filtros opcionales por proyecto y/o rango de fec
 
 ---
 
-## 9. `get_timeline` — Timeline de completadas
+## 11. `get_timeline` — Timeline de completadas
 
 Obtiene tareas completadas agrupadas por semana, con opción de vista semanal o mensual.
 
@@ -435,7 +498,7 @@ Obtiene tareas completadas agrupadas por semana, con opción de vista semanal o 
 
 ---
 
-## 10. `export_csv` — Exportar CSV
+## 12. `export_csv` — Exportar CSV
 
 Exporta tareas como string CSV con filtros opcionales.
 
