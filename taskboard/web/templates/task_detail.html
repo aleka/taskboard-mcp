@@ -98,30 +98,26 @@
                     <th>Completada</th>
                     <td>{{ task.completed_at or "&mdash;" }}</td>
                 </tr>
-                {% if task.git_commit %}
                 <tr>
                     <th>Git Commit</th>
-                    <td><code>{{ task.git_commit }}</code></td>
+                    <td>{% if task.git_commit %}<code>{{ task.git_commit }}</code>{% else %}<span class="empty-value">&mdash;</span>{% endif %}</td>
                 </tr>
-                {% endif %}
-                {% if task.git_branch %}
                 <tr>
                     <th>Git Branch</th>
-                    <td><code>{{ task.git_branch }}</code></td>
+                    <td>{% if task.git_branch %}<code>{{ task.git_branch }}</code>{% else %}<span class="empty-value">&mdash;</span>{% endif %}</td>
                 </tr>
-                {% endif %}
-                {% if task.description %}
                 <tr>
                     <th>Descripción</th>
-                    <td class="long-text">{{ task.description }}</td>
+                    <td>{% if task.description %}<span class="long-text">{{ task.description }}</span>{% else %}<span class="empty-value">&mdash;</span>{% endif %}</td>
                 </tr>
-                {% endif %}
-                {% if task.summary %}
                 <tr>
                     <th>Resumen</th>
-                    <td class="long-text">{{ task.summary }}</td>
+                    <td>{% if task.summary %}<span class="long-text">{{ task.summary }}</span>{% else %}<span class="empty-value">&mdash;</span>{% endif %}</td>
                 </tr>
-                {% endif %}
+                <tr>
+                    <th>Notas</th>
+                    <td>{% if task.notes %}<span class="long-text">{{ task.notes }}</span>{% else %}<span class="empty-value">&mdash;</span>{% endif %}</td>
+                </tr>
                  <tr>
                      <th>Tags</th>
                      <td>
@@ -130,16 +126,14 @@
                          <span class="badge badge-tag">{{ tag }}</span>
                          {% endfor %}
                          {% else %}
-                         <span class="empty-value">[]</span>
+                         <span class="empty-value">&mdash;</span>
                          {% endif %}
                      </td>
                  </tr>
-                 {% if task.parent_task_id %}
                  <tr>
                      <th>Parent</th>
-                     <td><a href="/tasks/{{ task.parent_task_id }}">{{ task.parent_task_id }}</a></td>
+                     <td>{% if task.parent_task_id %}<a href="/tasks/{{ task.parent_task_id }}">{{ task.parent_task_id }}</a>{% else %}<span class="empty-value">&mdash;</span>{% endif %}</td>
                  </tr>
-                 {% endif %}
              </tbody>
          </table>
      </section>
