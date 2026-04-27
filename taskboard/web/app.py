@@ -35,7 +35,7 @@ _STATIC_CACHE_MAX_AGE = 86400
 async def lifespan(app: Starlette) -> AsyncGenerator[None, None]:
     """Open the store on startup, close on shutdown."""
     store: TaskboardStore = app.state.store
-    store._connect()
+    store.__enter__()
     yield
     store.__exit__(None, None, None)
 
@@ -111,6 +111,24 @@ def create_app(store: TaskboardStore | None = None) -> Starlette:
             actions.change_status,
             methods=["POST"],
             name="action-change-status",
+        ),
+        Route(
+            "/actions/reports",
+            actions.generate_report,
+            methods=["POST"],
+            name="action-generate-report",
+        ),
+        Route(
+            "/actions/timeline",
+            actions.timeline_filter,
+            methods=["POST"],
+            name="action-timeline-filter",
+        ),
+        Route(
+            "/actions/dashboard/refresh",
+            actions.refresh_dashboard_section,
+            methods=["POST"],
+            name="action-dashboard-refresh",
         ),
 
         # ── REST API (JSON) ──
