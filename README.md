@@ -23,11 +23,13 @@ Un solo proceso Starlette sirve las tres interfaces: MCP (via fastmcp), REST API
 
 ## Features
 
-- **10 herramientas MCP** — add/complete/update/list tasks, proyectos, métricas, timeline, CSV export
+- **12 herramientas MCP** — add/complete/update/delete tasks, add/delete projects, tags, métricas, timeline, CSV export
 - **Web dashboard** — UI completa con dashboard, proyectos, timeline y reportes
 - **REST API** — JSON endpoints para tareas, proyectos, métricas y exportación
+- **Task tags** — Agrupá tareas con tags (ej: `["refactor-ui", "compliance-fix"]`) para métricas por categoría
 - **HTMX partials** — Updates en tiempo real sin recargar la página (cambio de status, filtros, métricas)
 - **CSV export** — Descargá datos filtrados por proyecto, fechas o combinados
+- **CSS Design System** — Variables centralizadas con cache busting automático
 - **Docker** — Un solo container con auto-restart y health checks
 - **Watchdog** — Monitoreo via cron con detección de crashes y recuperación automática
 - **Thread safety** — Connection-per-call + write lock (inspirado en Go's `database/sql`)
@@ -82,7 +84,7 @@ El watchdog chequea cada 30 minutos si el container está corriendo. Si no, logu
 |------|-------------|
 | [Guía de desarrollo](docs/guia-desarrollo.md) | Setup local, tests, Docker, estructura, cómo contribuir |
 | [Procedimiento de release](docs/release-procedure.md) | SemVer, flujo git tag → GitHub release, checklist |
-| [Herramientas MCP](docs/mcp-tools.md) | Documentación de las 10 herramientas MCP (parámetros, ejemplos, respuestas) |
+| [Herramientas MCP](docs/mcp-tools.md) | Documentación de las 12 herramientas MCP (parámetros, ejemplos, respuestas) |
 | [Guía web dashboard](docs/guia-web.md) | Páginas, acciones HTMX, partials y REST API |
 | [Seguimiento SDD](docs/sdd-phases/seguimiento-sdd.md) | Documento de creación del proyecto (exploración, specs, diseño, implementación, lecciones) |
 | [Investigación Engram Cloud](docs/investigacion-engram-cloud.md) | Arquitectura y patrones extraídos de Engram |
@@ -112,7 +114,7 @@ taskboard-mcp/
 ├── taskboard/
 │   ├── __init__.py
 │   ├── store.py                  # Core: SQLite (fuente de verdad, todas las interfaces delegan acá)
-│   ├── mcp_server.py             # MCP server via fastmcp (10 herramientas)
+│   ├── mcp_server.py             # MCP server via fastmcp (12 herramientas)
 │   └── web/
 │       ├── __init__.py
 │       ├── app.py                # Starlette app (monta MCP, API, Web)
@@ -126,6 +128,7 @@ taskboard-mcp/
 │       │   ├── dashboard.html    # Dashboard con métricas
 │       │   ├── project_list.html # Lista de proyectos
 │       │   ├── project_detail.html # Detalle de proyecto con tareas
+│       │   ├── task_detail.html   # Detalle de tarea con metadata y contenido
 │       │   ├── timeline.html     # Timeline cronológica
 │       │   ├── reports.html      # Reportes con filtros
 │       │   └── partials/         # HTMX partials
@@ -136,13 +139,13 @@ taskboard-mcp/
 ├── tests/
 │   ├── conftest.py               # Fixtures compartidas (store in-memory)
 │   ├── test_store.py             # Tests del store (CRUD, métricas, timeline, CSV)
-│   ├── test_mcp_server.py        # Tests de las 10 herramientas MCP
+│   ├── test_mcp_server.py        # Tests de las 12 herramientas MCP
 │   ├── test_web_routes.py        # Tests de rutas web (HTML + HTMX)
 │   └── test_api_routes.py        # Tests de la REST API (JSON)
 ├── docs/
 │   ├── guia-desarrollo.md        # Guía de desarrollo
 │   ├── guia-web.md               # Guía del web dashboard
-│   ├── mcp-tools.md              # Documentación de las 10 herramientas MCP
+│   ├── mcp-tools.md              # Documentación de las 12 herramientas MCP
 │   ├── release-procedure.md      # Procedimiento de release
 │   ├── investigacion-engram-cloud.md # Investigación de arquitectura
 │   └── sdd-phases/
@@ -180,7 +183,7 @@ uv run pytest tests/ -v --cov=taskboard
 uv run pytest tests/test_store.py -v
 ```
 
-165 tests, 94% coverage. Todos usan SQLite in-memory — nunca tocan la DB de producción.
+182 tests, 84% coverage. Todos usan SQLite in-memory — nunca tocan la DB de producción.
 
 ---
 

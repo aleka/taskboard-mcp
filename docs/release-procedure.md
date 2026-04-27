@@ -142,4 +142,5 @@ git push origin main --tags
 
 | Versión | Fecha | Descripción |
 |---------|-------|-------------|
-| `0.1.0` | TBD | Versión inicial — MCP server + web dashboard + REST API |
+| `0.1.0` | 2026-04-26 | Versión inicial — MCP server + web dashboard + REST API |
+| `0.2.0` | 2026-04-27 | Nuevas tools MCP (delete_task, delete_project, tags), task detail page, design system CSS, cache busting, HTMX compliance fixes, XSS sanitization |

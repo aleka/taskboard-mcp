@@ -39,7 +39,7 @@ Abrir http://localhost:7438 en el navegador.
 taskboard-mcp/
 ├── taskboard/
 │   ├── store.py              # FUENTE DE VERDAD — todas las interfaces delegan acá
-│   ├── mcp_server.py         # 10 herramientas MCP via fastmcp
+│   ├── mcp_server.py         # 12 herramientas MCP via fastmcp
 │   └── web/
 │       ├── app.py            # Starlette app factory (monta MCP + API + Web)
 │       ├── routes/
@@ -49,7 +49,7 @@ taskboard-mcp/
 │       │   └── partials.py   # HTMX fragments (GET /partials/*)
 │       ├── templates/        # Jinja2 templates
 │       └── static/           # CSS, JS, favicon
-├── tests/                    # 165 tests, 94% coverage
+├── tests/                    # 182 tests, 84% coverage
 └── docs/                     # Documentación
 ```
 
@@ -96,7 +96,7 @@ uv run pytest tests/ -vv -s
 - **SQLite in-memory**: Todos los tests usan `:memory:`, nunca tocan la DB de producción
 - **Fixtures**: `conftest.py` tiene fixtures compartidas (store in-memory, client HTTP)
 - **Naming**: `test_*.py` en `tests/`, clases `Test*`, métodos `test_*`
-- **Coverage target**: > 90% (actual: 94%)
+- **Coverage target**: > 90% (actual: 84%)
 - **Nuevas features**: Todo nuevo código debe incluir tests
 
 ### Archivos de tests
@@ -104,7 +104,7 @@ uv run pytest tests/ -vv -s
 | Archivo | Qué prueba |
 |---------|------------|
 | `test_store.py` | CRUD de tareas/proyectos, métricas, timeline, CSV export |
-| `test_mcp_server.py` | Las 10 herramientas MCP |
+| `test_mcp_server.py` | Las 12 herramientas MCP |
 | `test_web_routes.py` | Rutas web (HTML + HTMX) |
 | `test_api_routes.py` | REST API endpoints (JSON) |
 

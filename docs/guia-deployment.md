@@ -19,7 +19,7 @@ Taskboard MCP corre en **dos procesos** que comparten la misma DB:
         │
         └── Proceso 2: MCP Server local (OpenCode)
             └── start-mcp.sh → .venv/bin/python (stdio)
-                └── 10 tools MCP (add_task, list_tasks, etc.)
+            └── 12 tools MCP (add_task, delete_task, delete_project, tags, etc.)
 ```
 
 ## Cómo Actualizar Código

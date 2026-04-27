@@ -75,6 +75,37 @@ Detalle de un proyecto con su tabla de tareas y filtros.
 
 ---
 
+### `/tasks/{task_id}` — Detalle de tarea
+
+Vista individual de una tarea con toda su metadata y contenido.
+
+**Contenido:**
+- Info de la tarea (título, status, tipo, prioridad, proyecto)
+- Descripción completa
+- Fechas de creación y completitud
+- Tags asignados
+- Navegación prev/next dentro del mismo proyecto
+
+**Path params:**
+
+| Parámetro | Tipo | Descripción |
+|-----------|------|-------------|
+| `task_id` | `str` | ID de la tarea (ej: `myproj_001`) |
+
+**Datos inyectados al template:**
+
+| Variable | Tipo | Descripción |
+|----------|------|-------------|
+| `task` | `dict \| None` | Datos de la tarea (`None` si no existe, devuelve 404) |
+| `project_slug` | `str` | Slug del proyecto para links |
+| `neighbors` | `dict` | `{"prev": "xx_NNN" \| None, "next": "xx_NNN" \| None}` para navegación |
+
+**Notas:**
+- Usa `store.get_task_neighbors()` para generar links prev/next ordenados por `created_at`.
+- Si el `task_id` no existe, devuelve 404.
+
+---
+
 ### `/timeline` — Timeline de tareas completadas
 
 Vista cronológica de tareas completadas, agrupadas por semana.

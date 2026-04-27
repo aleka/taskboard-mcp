@@ -45,6 +45,7 @@ class TestAddTask:
             title="Test task",
             type="chore",
             description="",
+            tags=None,
             priority="medium",
         )
 
@@ -111,6 +112,31 @@ class TestUpdateTaskStatus:
             result = func(task_id="tp_999", status="blocked")
 
         assert result["status"] == "error"
+
+
+class TestDeleteTask:
+    def test_success(self):
+        func = _make_tool_func("delete_task")
+        ctx, store = _patch_store()
+        store.delete_task.return_value = True
+
+        with ctx:
+            result = func(task_id="tp_001")
+
+        assert result["status"] == "success"
+        assert result["data"]["deleted"] == "tp_001"
+        store.delete_task.assert_called_once_with(task_id="tp_001")
+
+    def test_not_found(self):
+        func = _make_tool_func("delete_task")
+        ctx, store = _patch_store()
+        store.delete_task.return_value = False
+
+        with ctx:
+            result = func(task_id="tp_999")
+
+        assert result["status"] == "error"
+        assert "not found" in result["message"]
 
 
 class TestListTasks:
@@ -376,6 +402,45 @@ class TestListProjects:
 
         assert result["status"] == "success"
         assert len(result["data"]) == 2
+
+
+class TestDeleteProject:
+    def test_success(self):
+        func = _make_tool_func("delete_project")
+        ctx, store = _patch_store()
+        store.delete_project.return_value = {"deleted": "myproj", "tasks_removed": 3}
+
+        with ctx:
+            result = func(name="myproj", force=True)
+
+        assert result["status"] == "success"
+        assert result["data"]["deleted"] == "myproj"
+        assert result["data"]["tasks_removed"] == 3
+        store.delete_project.assert_called_once_with(name="myproj", force=True)
+
+    def test_not_found(self):
+        func = _make_tool_func("delete_project")
+        ctx, store = _patch_store()
+        store.delete_project.side_effect = ValueError("Project 'nope' not found")
+
+        with ctx:
+            result = func(name="nope")
+
+        assert result["status"] == "error"
+        assert "not found" in result["message"]
+
+    def test_has_tasks_no_force(self):
+        func = _make_tool_func("delete_project")
+        ctx, store = _patch_store()
+        store.delete_project.side_effect = ValueError(
+            "Project 'myproj' has 5 associated task(s). Use force=True to delete them as well."
+        )
+
+        with ctx:
+            result = func(name="myproj")
+
+        assert result["status"] == "error"
+        assert "5 associated task" in result["message"]
 
 
 # ── Analytics tools ────────────────────────────────────────────────
