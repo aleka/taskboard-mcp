@@ -41,6 +41,8 @@ def add_task(
     description: str = "",
     tags: list[str] | None = None,
     priority: str = "medium",
+    git_commit: str | None = None,
+    parent_task_id: str | None = None,
 ) -> dict[str, Any]:
     """Create a new task in the taskboard.
 
@@ -51,6 +53,8 @@ def add_task(
         description: Optional description/notes.
         tags: Optional list of tags for grouping (e.g. ["refactor-ui", "compliance-fix"]).
         priority: Task priority — one of low, medium, high, urgent.
+        git_commit: Optional git commit hash associated with this task.
+        parent_task_id: Optional parent task ID for task hierarchy.
 
     Returns:
         The created task dict with task_id, status, timestamps, etc.
@@ -64,6 +68,8 @@ def add_task(
             description=description,
             tags=tags,
             priority=priority,
+            git_commit=git_commit,
+            parent_task_id=parent_task_id,
         )
         return {"status": "success", "data": task}
     except Exception as e:
@@ -259,6 +265,119 @@ def delete_project(name: str, force: bool = False) -> dict[str, Any]:
         store = _get_store()
         result = store.delete_project(name=name, force=force)
         return {"status": "success", "data": result}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
+# ── V2 Tools: Tag editing, history, update ──────────────────────────
+
+
+@mcp.tool()
+def task_add_tag(task_id: str, tag: str) -> dict[str, Any]:
+    """Add a tag to a task. No-op if tag already exists.
+
+    Args:
+        task_id: The task ID (e.g. 'tp_001').
+        tag: Tag to add.
+
+    Returns:
+        The updated task dict.
+    """
+    try:
+        store = _get_store()
+        task = store.add_tag(task_id=task_id, tag=tag)
+        return {"status": "success", "data": task}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
+@mcp.tool()
+def task_remove_tag(task_id: str, tag: str) -> dict[str, Any]:
+    """Remove a tag from a task. No-op if tag not present.
+
+    Args:
+        task_id: The task ID (e.g. 'tp_001').
+        tag: Tag to remove.
+
+    Returns:
+        The updated task dict.
+    """
+    try:
+        store = _get_store()
+        task = store.remove_tag(task_id=task_id, tag=tag)
+        return {"status": "success", "data": task}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
+@mcp.tool()
+def get_task_history(task_id: str) -> dict[str, Any]:
+    """Get status transition history for a task.
+
+    Args:
+        task_id: The task ID (e.g. 'tp_001').
+
+    Returns:
+        List of history entries ordered newest first, each with
+        from_status, to_status, at, note, git_commit.
+    """
+    try:
+        store = _get_store()
+        history = store.get_task_history(task_id=task_id)
+        return {"status": "success", "data": history}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
+@mcp.tool()
+def update_task(
+    task_id: str,
+    title: str | None = None,
+    description: str | None = None,
+    priority: str | None = None,
+    type: str | None = None,
+    status: str | None = None,
+    git_commit: str | None = None,
+    parent_task_id: str | None = None,
+) -> dict[str, Any]:
+    """Update editable fields on a task. Only provided fields are changed.
+
+    Args:
+        task_id: The task ID (e.g. 'tp_001').
+        title: New title (optional).
+        description: New description (optional).
+        priority: New priority — low, medium, high, urgent (optional).
+        type: New type — feature, bugfix, refactor, etc. (optional).
+        status: New status — todo, in_progress, blocked, done, cancelled (optional).
+        git_commit: Git commit hash (optional).
+        parent_task_id: Parent task ID, or empty string to clear (optional).
+
+    Returns:
+        The updated task dict.
+    """
+    try:
+        store = _get_store()
+        # Map empty string parent_task_id to None (clear parent)
+        from taskboard.store import _SENTINEL
+
+        update_kwargs: dict[str, Any] = {}
+        if title is not None:
+            update_kwargs["title"] = title
+        if description is not None:
+            update_kwargs["description"] = description
+        if priority is not None:
+            update_kwargs["priority"] = priority
+        if type is not None:
+            update_kwargs["type"] = type
+        if status is not None:
+            update_kwargs["status"] = status
+        if git_commit is not None:
+            update_kwargs["git_commit"] = git_commit
+        # Always pass parent_task_id to distinguish "not passed" from "clear"
+        update_kwargs["parent_task_id"] = parent_task_id if parent_task_id != "" else None
+
+        task = store.update_task(task_id=task_id, **update_kwargs)
+        return {"status": "success", "data": task}
     except Exception as e:
         return {"status": "error", "message": str(e)}
 

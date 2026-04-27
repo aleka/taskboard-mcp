@@ -2,9 +2,13 @@
 
 import csv
 import io
+import json
 import re
+import sqlite3
 
 import pytest
+
+from taskboard.store import TaskboardStore
 
 
 # ── Connection lifecycle ────────────────────────────────────────────
@@ -748,3 +752,479 @@ class TestTimelineInvalidDate:
         # Should not crash
         tw = store.get_timeline_week()
         assert isinstance(tw, list)
+
+
+# ── Migration Framework (v1→v2) ──────────────────────────────────────
+
+
+def _create_v1_schema(conn: sqlite3.Connection) -> None:
+    """Create a v1 schema (no parent_task_id column) for migration tests."""
+    conn.executescript("""
+        PRAGMA journal_mode = WAL;
+        PRAGMA foreign_keys = ON;
+
+        CREATE TABLE IF NOT EXISTS projects (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          name TEXT NOT NULL UNIQUE,
+          display_name TEXT NOT NULL,
+          slug TEXT NOT NULL UNIQUE,
+          origin TEXT NOT NULL CHECK(origin IN ('github', 'gitlab', 'local')),
+          repo TEXT,
+          path TEXT NOT NULL,
+          tags TEXT NOT NULL DEFAULT '[]',
+          created_at TEXT NOT NULL DEFAULT (datetime('now')),
+          updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+
+        CREATE TABLE IF NOT EXISTS tasks (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          task_id TEXT NOT NULL UNIQUE,
+          title TEXT NOT NULL,
+          type TEXT NOT NULL CHECK(type IN (
+            'feature', 'bugfix', 'refactor', 'config', 'chore', 'docs', 'testing', 'infra'
+          )),
+          project_name TEXT NOT NULL,
+          status TEXT NOT NULL DEFAULT 'todo' CHECK(status IN (
+            'todo', 'in_progress', 'blocked', 'done', 'cancelled'
+          )),
+          source TEXT NOT NULL DEFAULT 'manual' CHECK(source IN ('sdd', 'manual', 'detected')),
+          priority TEXT NOT NULL DEFAULT 'medium' CHECK(priority IN ('low', 'medium', 'high', 'urgent')),
+          created_at TEXT NOT NULL DEFAULT (datetime('now')),
+          completed_at TEXT,
+          git_commit TEXT,
+          git_branch TEXT,
+          summary TEXT NOT NULL DEFAULT '',
+          tags TEXT NOT NULL DEFAULT '[]',
+          description TEXT NOT NULL DEFAULT '',
+          FOREIGN KEY (project_name) REFERENCES projects(name) ON UPDATE CASCADE
+        );
+
+        CREATE TABLE IF NOT EXISTS task_history (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          task_id TEXT NOT NULL,
+          from_status TEXT,
+          to_status TEXT NOT NULL,
+          note TEXT NOT NULL DEFAULT '',
+          git_commit TEXT,
+          at TEXT NOT NULL DEFAULT (datetime('now')),
+          FOREIGN KEY (task_id) REFERENCES tasks(task_id) ON DELETE CASCADE
+        );
+
+        CREATE TABLE IF NOT EXISTS meta (
+          key TEXT PRIMARY KEY,
+          value TEXT NOT NULL
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_tasks_project ON tasks(project_name);
+        CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
+    """)
+    conn.execute(
+        "INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '1')"
+    )
+    conn.commit()
+
+
+class TestMigrationV2:
+    """Tests for v1→v2 migration: ADD COLUMN parent_task_id + index."""
+
+    def test_migrate_v2_adds_parent_column(self):
+        """Fresh v1 DB gets parent_task_id column after migration."""
+        conn = sqlite3.connect(":memory:")
+        conn.row_factory = sqlite3.Row
+        _create_v1_schema(conn)
+
+        from taskboard.store import _migrate_v2
+        _migrate_v2(conn)
+
+        columns = [r[1] for r in conn.execute("PRAGMA table_info(tasks)").fetchall()]
+        assert "parent_task_id" in columns
+
+    def test_migrate_v2_adds_index(self):
+        """Migration creates idx_tasks_parent index."""
+        conn = sqlite3.connect(":memory:")
+        conn.row_factory = sqlite3.Row
+        _create_v1_schema(conn)
+
+        from taskboard.store import _migrate_v2
+        _migrate_v2(conn)
+
+        indexes = [r["name"] for r in conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='index' AND name='idx_tasks_parent'"
+        ).fetchall()]
+        assert "idx_tasks_parent" in indexes
+
+    def test_migrate_v2_existing_tasks_get_null_parent(self):
+        """Tasks that existed before migration have parent_task_id=NULL."""
+        conn = sqlite3.connect(":memory:")
+        conn.row_factory = sqlite3.Row
+        _create_v1_schema(conn)
+        # Insert a seed project and task
+        conn.execute(
+            "INSERT INTO projects (name, display_name, slug, origin, path) "
+            "VALUES ('testproj', 'Test', 'tp', 'local', '/tmp')"
+        )
+        conn.execute(
+            "INSERT INTO tasks (task_id, title, type, project_name, status, source, priority, summary, tags, description, created_at) "
+            "VALUES ('tp_001', 'Old task', 'chore', 'testproj', 'todo', 'manual', 'medium', '', '[]', '', datetime('now'))"
+        )
+        conn.commit()
+
+        from taskboard.store import _migrate_v2
+        _migrate_v2(conn)
+
+        task = conn.execute("SELECT parent_task_id FROM tasks WHERE task_id='tp_001'").fetchone()
+        assert task["parent_task_id"] is None
+
+    def test_migrate_v2_idempotent(self):
+        """Running migration twice does not raise an error."""
+        conn = sqlite3.connect(":memory:")
+        conn.row_factory = sqlite3.Row
+        _create_v1_schema(conn)
+
+        from taskboard.store import _migrate_v2
+        _migrate_v2(conn)
+        _migrate_v2(conn)  # Second run — should be no-op
+
+        columns = [r[1] for r in conn.execute("PRAGMA table_info(tasks)").fetchall()]
+        assert "parent_task_id" in columns
+
+    def test_migrate_v2_sets_schema_version(self):
+        """Migration updates meta.schema_version to 2."""
+        conn = sqlite3.connect(":memory:")
+        conn.row_factory = sqlite3.Row
+        _create_v1_schema(conn)
+
+        from taskboard.store import _migrate_v2, _run_migrations
+        _migrate_v2(conn)
+        conn.execute(
+            "INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '2')"
+        )
+        conn.commit()
+
+        # _run_migrations should skip v2 since version is already 2
+        _run_migrations(conn)
+        version = conn.execute(
+            "SELECT value FROM meta WHERE key = 'schema_version'"
+        ).fetchone()[0]
+        assert version == "2"
+
+    def test_run_migrations_skips_in_memory(self):
+        """In-memory stores (persistent_conn) skip migrations entirely."""
+        from taskboard.store import TaskboardStore, _run_migrations
+
+        s = TaskboardStore.__new__(TaskboardStore)
+        s._db_path = ":memory:"
+        s._persistent_conn = sqlite3.connect(":memory:", check_same_thread=True)
+        s._persistent_conn.row_factory = sqlite3.Row
+
+        # Don't set schema_version — if migration runs, it would fail
+        # because no tables exist. Skipping proves the guard works.
+        _run_migrations(s._persistent_conn)
+        # No error means it was skipped
+        s._persistent_conn.close()
+
+    def test_run_migrations_from_v1(self):
+        """_run_migrations progresses from v1 to v2."""
+        conn = sqlite3.connect(":memory:")
+        conn.row_factory = sqlite3.Row
+        _create_v1_schema(conn)
+
+        from taskboard.store import _run_migrations
+        _run_migrations(conn)
+
+        version = conn.execute(
+            "SELECT value FROM meta WHERE key = 'schema_version'"
+        ).fetchone()[0]
+        assert version == "2"
+        columns = [r[1] for r in conn.execute("PRAGMA table_info(tasks)").fetchall()]
+        assert "parent_task_id" in columns
+
+
+# ── update_task (V2-05) ─────────────────────────────────────────────
+
+
+class TestUpdateTask:
+    """Tests for the generic update_task() method."""
+
+    def test_update_single_field_title(self, store):
+        """Only the title field is updated; other fields unchanged."""
+        task = store.add_task("testproj", "Original title")
+        updated = store.update_task(task["task_id"], title="New title")
+        assert updated["title"] == "New title"
+        assert updated["status"] == "todo"
+        assert updated["priority"] == "medium"
+
+    def test_update_multiple_fields(self, store):
+        """Multiple fields updated in a single call."""
+        task = store.add_task("testproj", "Multi update")
+        updated = store.update_task(
+            task["task_id"], title="Updated", priority="high", type="feature"
+        )
+        assert updated["title"] == "Updated"
+        assert updated["priority"] == "high"
+        assert updated["type"] == "feature"
+
+    def test_update_status_records_history(self, store):
+        """Changing status via update_task records a history entry."""
+        task = store.add_task("testproj", "Status test")
+        store.update_task(task["task_id"], status="in_progress")
+        history = store.get_task_history(task["task_id"])
+        assert len(history) >= 2
+        assert history[0]["to_status"] == "in_progress"
+        assert history[0]["from_status"] == "todo"
+
+    def test_update_nonexistent_raises(self, store):
+        """Updating a task that doesn't exist raises ValueError."""
+        with pytest.raises(ValueError, match="not found"):
+            store.update_task("nonexistent_001", title="Nope")
+
+    def test_update_no_fields_returns_unchanged(self, store):
+        """Passing no fields returns task as-is without changes."""
+        task = store.add_task("testproj", "No change")
+        result = store.update_task(task["task_id"])
+        assert result["title"] == "No change"
+        assert result["status"] == "todo"
+
+    def test_update_clears_parent(self, store):
+        """Setting parent_task_id=None clears the parent relationship."""
+        parent = store.add_task("testproj", "Parent task")
+        child = store.add_task("testproj", "Child task", parent_task_id=parent["task_id"])
+        assert child["parent_task_id"] == parent["task_id"]
+
+        updated = store.update_task(child["task_id"], parent_task_id=None)
+        assert updated["parent_task_id"] is None
+
+
+# ── get_task_history (V2-06) ────────────────────────────────────────
+
+
+class TestGetTaskHistory:
+    """Tests for reading task status history."""
+
+    def test_task_with_history(self, store):
+        """Task with multiple status changes returns all entries."""
+        task = store.add_task("testproj", "History test")
+        store.update_task_status(task["task_id"], "in_progress", note="Started")
+        store.update_task_status(task["task_id"], "blocked", note="Waiting")
+
+        history = store.get_task_history(task["task_id"])
+        assert len(history) == 3  # creation + 2 changes
+        # Ordered newest first
+        assert history[0]["to_status"] == "blocked"
+        assert history[0]["from_status"] == "in_progress"
+        assert history[1]["to_status"] == "in_progress"
+        assert history[1]["from_status"] == "todo"
+
+    def test_task_with_no_changes(self, store):
+        """Freshly created task has exactly one history entry (creation)."""
+        task = store.add_task("testproj", "Fresh task")
+        history = store.get_task_history(task["task_id"])
+        assert len(history) == 1
+        assert history[0]["from_status"] is None
+        assert history[0]["to_status"] == "todo"
+
+    def test_nonexistent_task_returns_empty(self, store):
+        """Non-existent task returns empty history list."""
+        history = store.get_task_history("nonexistent_001")
+        assert history == []
+
+
+# ── Atomic Tag Editing (V2-09) ───────────────────────────────────────
+
+
+class TestAtomicTagOps:
+    """Tests for add_tag() and remove_tag() methods."""
+
+    def test_add_new_tag(self, store):
+        """Adding a new tag appends it to the tags list."""
+        task = store.add_task("testproj", "Tag test", tags=["existing"])
+        updated = store.add_tag(task["task_id"], "new-tag")
+        tags = json.loads(updated["tags"])
+        assert "new-tag" in tags
+        assert "existing" in tags
+
+    def test_add_duplicate_tag_is_noop(self, store):
+        """Adding a tag that already exists doesn't duplicate it."""
+        task = store.add_task("testproj", "Dup test", tags=["alpha"])
+        updated = store.add_tag(task["task_id"], "alpha")
+        tags = json.loads(updated["tags"])
+        assert tags.count("alpha") == 1
+
+    def test_remove_existing_tag(self, store):
+        """Removing an existing tag removes it from the list."""
+        task = store.add_task("testproj", "Remove test", tags=["alpha", "beta"])
+        updated = store.remove_tag(task["task_id"], "alpha")
+        tags = json.loads(updated["tags"])
+        assert "alpha" not in tags
+        assert "beta" in tags
+
+    def test_remove_missing_tag_is_noop(self, store):
+        """Removing a tag that doesn't exist doesn't change the list."""
+        task = store.add_task("testproj", "Noop test", tags=["alpha"])
+        updated = store.remove_tag(task["task_id"], "missing")
+        tags = json.loads(updated["tags"])
+        assert tags == ["alpha"]
+
+    def test_add_tag_to_empty_list(self, store):
+        """Adding a tag to a task with no tags works."""
+        task = store.add_task("testproj", "Empty tags")
+        updated = store.add_tag(task["task_id"], "first")
+        tags = json.loads(updated["tags"])
+        assert tags == ["first"]
+
+    def test_concurrent_add_tag_two_threads(self, store):
+        """Two threads adding different tags concurrently both succeed."""
+        import threading
+        from tests.conftest import _init_schema
+
+        # Use file-based temp DB for real concurrent access (in-memory is unreliable)
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = f"{tmpdir}/test.db"
+            ts_store = TaskboardStore(db_path=db_path)
+            conn = ts_store._connect()
+            _init_schema(conn)
+            conn.close()
+            ts_store.add_project(
+                name="testproj", display_name="Test", slug="tp", origin="local", path="/tmp/tp"
+            )
+
+            task = ts_store.add_task("testproj", "Concurrent tags")
+            task_id = task["task_id"]
+
+            errors: list[str] = []
+
+            def add_tag_safe(tag: str) -> None:
+                try:
+                    ts_store.add_tag(task_id, tag)
+                except Exception as exc:
+                    errors.append(str(exc))
+
+            t1 = threading.Thread(target=add_tag_safe, args=("thread-a",))
+            t2 = threading.Thread(target=add_tag_safe, args=("thread-b",))
+            t1.start()
+            t2.start()
+            t1.join()
+            t2.join()
+
+            assert errors == [], f"Concurrent add_tag raised: {errors}"
+            result = ts_store.get_task(task_id)
+            tags = json.loads(result["tags"])
+            assert "thread-a" in tags
+            assert "thread-b" in tags
+
+    def test_concurrent_add_tag_ten_threads(self, store):
+        """Ten threads adding unique tags concurrently all succeed without lost updates."""
+        import threading
+        import tempfile
+        from tests.conftest import _init_schema
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = f"{tmpdir}/test.db"
+            ts_store = TaskboardStore(db_path=db_path)
+            conn = ts_store._connect()
+            _init_schema(conn)
+            conn.close()
+            ts_store.add_project(
+                name="testproj", display_name="Test", slug="tp", origin="local", path="/tmp/tp"
+            )
+
+            task = ts_store.add_task("testproj", "Many concurrent tags")
+            task_id = task["task_id"]
+            tag_names = [f"tag-{i}" for i in range(10)]
+
+            errors: list[str] = []
+
+            def add_tag_safe(tag: str) -> None:
+                try:
+                    ts_store.add_tag(task_id, tag)
+                except Exception as exc:
+                    errors.append(str(exc))
+
+            threads = [threading.Thread(target=add_tag_safe, args=(t,)) for t in tag_names]
+            for t in threads:
+                t.start()
+            for t in threads:
+                t.join()
+
+            assert errors == [], f"Concurrent add_tag raised: {errors}"
+            result = ts_store.get_task(task_id)
+            tags = json.loads(result["tags"])
+            for tag_name in tag_names:
+                assert tag_name in tags, f"Missing tag {tag_name} after concurrent adds"
+            assert len(tags) == 10, f"Expected 10 tags, got {len(tags)}: {tags}"
+
+
+# ── Parent-Child Hierarchy (V2-07 + V2-08) ──────────────────────────
+
+
+class TestParentChild:
+    """Tests for set_parent, get_children, get_parent, cycle detection."""
+
+    def test_set_parent(self, store):
+        """Setting a parent creates the relationship."""
+        parent = store.add_task("testproj", "Parent")
+        child = store.add_task("testproj", "Child")
+        updated = store.set_parent(child["task_id"], parent["task_id"])
+        assert updated["parent_task_id"] == parent["task_id"]
+
+    def test_get_children(self, store):
+        """get_children returns all direct children of a task."""
+        parent = store.add_task("testproj", "Parent")
+        c1 = store.add_task("testproj", "Child 1", parent_task_id=parent["task_id"])
+        c2 = store.add_task("testproj", "Child 2", parent_task_id=parent["task_id"])
+        children = store.get_children(parent["task_id"])
+        ids = [c["task_id"] for c in children]
+        assert c1["task_id"] in ids
+        assert c2["task_id"] in ids
+
+    def test_get_parent(self, store):
+        """get_parent returns the parent task dict."""
+        parent = store.add_task("testproj", "Parent")
+        child = store.add_task("testproj", "Child", parent_task_id=parent["task_id"])
+        result = store.get_parent(child["task_id"])
+        assert result is not None
+        assert result["task_id"] == parent["task_id"]
+
+    def test_get_parent_none(self, store):
+        """get_parent returns None for a task without a parent."""
+        task = store.add_task("testproj", "Orphan")
+        assert store.get_parent(task["task_id"]) is None
+
+    def test_set_parent_self_reference_raises(self, store):
+        """Setting a task as its own parent raises ValueError."""
+        task = store.add_task("testproj", "Self")
+        with pytest.raises(ValueError, match="cannot be its own parent"):
+            store.set_parent(task["task_id"], task["task_id"])
+
+    def test_set_parent_indirect_cycle_raises(self, store):
+        """Creating A→B→A cycle raises ValueError."""
+        a = store.add_task("testproj", "Task A")
+        b = store.add_task("testproj", "Task B")
+        store.set_parent(b["task_id"], a["task_id"])
+        with pytest.raises(ValueError, match="would create a cycle"):
+            store.set_parent(a["task_id"], b["task_id"])
+
+    def test_set_parent_nonexistent_raises(self, store):
+        """Setting parent to a non-existent task raises ValueError."""
+        child = store.add_task("testproj", "Child")
+        with pytest.raises(ValueError, match="not found"):
+            store.set_parent(child["task_id"], "nonexistent_001")
+
+    def test_clear_parent(self, store):
+        """Setting parent to None clears the relationship."""
+        parent = store.add_task("testproj", "Parent")
+        child = store.add_task("testproj", "Child", parent_task_id=parent["task_id"])
+        updated = store.set_parent(child["task_id"], None)
+        assert updated["parent_task_id"] is None
+
+    def test_get_children_empty(self, store):
+        """get_children returns empty list for task with no children."""
+        task = store.add_task("testproj", "No kids")
+        assert store.get_children(task["task_id"]) == []
+
+    def test_add_task_with_parent(self, store):
+        """add_task accepts parent_task_id and stores it."""
+        parent = store.add_task("testproj", "Parent")
+        child = store.add_task("testproj", "Child", parent_task_id=parent["task_id"])
+        assert child["parent_task_id"] == parent["task_id"]

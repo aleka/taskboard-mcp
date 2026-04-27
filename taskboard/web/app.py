@@ -87,6 +87,7 @@ def create_app(store: TaskboardStore | None = None) -> Starlette:
         Route("/projects", pages.project_list, name="projects"),
         Route("/projects/{slug:path}", pages.project_detail, name="project-detail"),
         Route("/tasks/{task_id}", pages.task_detail, name="task-detail"),
+        Route("/tasks/{task_id}/edit", pages.task_edit, name="task-edit"),
         Route("/timeline", pages.timeline_view, name="timeline"),
         Route("/reports", pages.reports_view, name="reports"),
 
@@ -97,6 +98,7 @@ def create_app(store: TaskboardStore | None = None) -> Starlette:
         Route("/partials/timeline-group", partials.timeline_group, name="partial-timeline"),
         Route("/partials/project-cards", partials.project_cards, name="partial-project-cards"),
         Route("/partials/recent-activity", partials.recent_activity, name="partial-recent-activity"),
+        Route("/partials/task-history/{task_id}", partials.task_history, name="partial-task-history"),
 
         # ── HTMX actions (form-encoded POST, returns HTML) ──
         Route("/actions/tasks", actions.add_task, methods=["POST"], name="action-add-task"),
@@ -111,6 +113,18 @@ def create_app(store: TaskboardStore | None = None) -> Starlette:
             actions.change_status,
             methods=["POST"],
             name="action-change-status",
+        ),
+        Route(
+            "/actions/tasks/{task_id}/edit",
+            actions.edit_task,
+            methods=["POST"],
+            name="action-edit-task",
+        ),
+        Route(
+            "/actions/tasks/{task_id}/delete",
+            actions.delete_task,
+            methods=["POST"],
+            name="action-delete-task",
         ),
         Route(
             "/actions/reports",

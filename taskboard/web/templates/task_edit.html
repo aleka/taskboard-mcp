@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+
+{% block title %}{% if task %}Edit: {{ task.task_id }} — {{ task.title }}{% else %}Task Not Found{% endif %} — Taskboard{% endblock %}
+
+{% block content %}
+<div class="container">
+    {% if task %}
+    <nav class="breadcrumb">
+        <a href="/">Dashboard</a> &raquo;
+        {% if project %}
+        <a href="/projects/{{ project.slug }}">{{ project.display_name or project.name }}</a> &raquo;
+        {% else %}
+        {{ task.project_name }} &raquo;
+        {% endif %}
+        <a href="/tasks/{{ task.task_id }}">{{ task.task_id }}</a> &raquo;
+        <span>Edit</span>
+    </nav>
+
+    <h1>Edit Task: {{ task.task_id }}</h1>
+
+    <form method="POST" action="/actions/tasks/{{ task.task_id }}/edit" class="form-card card">
+        <div class="form-group">
+            <label for="title">Title</label>
+            <input type="text" id="title" name="title" value="{{ task.title }}" required class="form-control">
+        </div>
+
+        <div class="form-group">
+            <label for="description">Description</label>
+            <textarea id="description" name="description" class="form-control" rows="3">{{ task.description or '' }}</textarea>
+        </div>
+
+        <div class="form-row">
+            <div class="form-group">
+                <label for="type">Type</label>
+                <select id="type" name="type" class="form-control">
+                    {% for t in ['feature', 'bugfix', 'refactor', 'config', 'chore', 'docs', 'testing', 'infra'] %}
+                    <option value="{{ t }}" {% if task.type == t %}selected{% endif %}>{{ t }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="priority">Priority</label>
+                <select id="priority" name="priority" class="form-control">
+                    {% for p in ['low', 'medium', 'high', 'urgent'] %}
+                    <option value="{{ p }}" {% if task.priority == p %}selected{% endif %}>{{ p }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="status">Status</label>
+                <select id="status" name="status" class="form-control">
+                    {% for s in ['todo', 'in_progress', 'blocked', 'done', 'cancelled'] %}
+                    <option value="{{ s }}" {% if task.status == s %}selected{% endif %}>{{ s }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+
+        <div class="form-row">
+            <div class="form-group">
+                <label for="tags">Tags (comma-separated)</label>
+                <input type="text" id="tags" name="tags" value="{{ tags | join(', ') }}" class="form-control" placeholder="tag1, tag2">
+            </div>
+            <div class="form-group">
+                <label for="git_commit">Git Commit</label>
+                <input type="text" id="git_commit" name="git_commit" value="{{ task.git_commit or '' }}" class="form-control" placeholder="abc123">
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label for="parent_task_id">Parent Task</label>
+            <select id="parent_task_id" name="parent_task_id" class="form-control">
+                <option value="">— None —</option>
+                {% for pt in project_tasks %}
+                {% if pt.task_id != task.task_id %}
+                <option value="{{ pt.task_id }}" {% if task.parent_task_id == pt.task_id %}selected{% endif %}>
+                    {{ pt.task_id }} — {{ pt.title }}
+                </option>
+                {% endif %}
+                {% endfor %}
+            </select>
+        </div>
+
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">Save Changes</button>
+            <a href="/tasks/{{ task.task_id }}" class="btn btn-secondary">Cancel</a>
+        </div>
+    </form>
+
+    {% else %}
+    <div class="empty-state-container">
+        <h1>Task Not Found</h1>
+        <p class="empty-state">The task <strong>{{ task_id }}</strong> does not exist.</p>
+        <a href="/" class="btn btn-primary">Back to Dashboard</a>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

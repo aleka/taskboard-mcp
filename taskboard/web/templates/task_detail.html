@@ -23,6 +23,13 @@
         </div>
         
         <div class="header-actions">
+            <a href="/tasks/{{ task.task_id }}/edit" class="btn btn-secondary btn-sm">Edit</a>
+            <button class="btn btn-danger btn-sm"
+                    hx-post="/actions/tasks/{{ task.task_id }}/delete"
+                    hx-confirm="Are you sure you want to delete this task?"
+                    hx-on::response-error="alert(event.detail.xhr.responseXML || event.detail.xhr.responseText)">
+                Delete
+            </button>
             <a href="/" class="btn btn-secondary btn-sm">&larr; Dashboard</a>
         </div>
     </div>
@@ -115,21 +122,36 @@
                     <td class="long-text">{{ task.summary }}</td>
                 </tr>
                 {% endif %}
-                <tr>
-                    <th>Tags</th>
-                    <td>
-                        {% if tags and tags|length > 0 %}
-                        {% for tag in tags %}
-                        <span class="badge badge-tag">{{ tag }}</span>
-                        {% endfor %}
-                        {% else %}
-                        <span class="empty-value">[]</span>
-                        {% endif %}
-                    </td>
-                </tr>
-            </tbody>
-        </table>
-    </section>
+                 <tr>
+                     <th>Tags</th>
+                     <td>
+                         {% if tags and tags|length > 0 %}
+                         {% for tag in tags %}
+                         <span class="badge badge-tag">{{ tag }}</span>
+                         {% endfor %}
+                         {% else %}
+                         <span class="empty-value">[]</span>
+                         {% endif %}
+                     </td>
+                 </tr>
+                 {% if task.parent_task_id %}
+                 <tr>
+                     <th>Parent</th>
+                     <td><a href="/tasks/{{ task.parent_task_id }}">{{ task.parent_task_id }}</a></td>
+                 </tr>
+                 {% endif %}
+             </tbody>
+         </table>
+     </section>
+
+     <!-- History Timeline -->
+     <section class="card">
+         <h2 class="card-title">Status History</h2>
+         <div id="history-container"
+              hx-get="/partials/task-history/{{ task.task_id }}"
+              hx-trigger="load">
+         </div>
+     </section>
 
     <!-- Navigation Buttons at the bottom -->
     <section class="task-nav">

@@ -1,6 +1,6 @@
 # Herramientas MCP — Referencia completa
 
-12 herramientas disponibles para agentes de IA via MCP (OpenCode, Claude Desktop, etc.). Todas delegan a `TaskboardStore` y devuelven JSON.
+16 herramientas disponibles para agentes de IA via MCP (OpenCode, Claude Desktop, etc.). Todas delegan a `TaskboardStore` y devuelven JSON.
 
 ---
 
@@ -62,6 +62,8 @@ Crea una nueva tarea en un proyecto existente. El status inicial es siempre `tod
 | `description` | `str` | No | `""` | Descripción o notas |
 | `tags` | `list[str] \| None` | No | `None` | Tags para agrupar (ej: `["refactor-ui", "compliance-fix"]`) |
 | `priority` | `str` | No | `"medium"` | Prioridad de la tarea |
+| `git_commit` | `str` | No | `""` | Hash del commit asociado (para vincular con trabajo en git) |
+| `parent_task_id` | `str` | No | `None` | ID de la tarea padre (crea relación parent-child) |
 
 ### Ejemplo de respuesta
 
@@ -92,6 +94,8 @@ Crea una nueva tarea en un proyecto existente. El status inicial es siempre `tod
 - El `source` siempre queda en `"manual"` desde MCP (no se pasa como parámetro).
 - Si el proyecto no existe, devuelve `{"status": "error", "message": "..."}`.
 - Los `tags` se almacenan como JSON en la columna `tags`. Útiles para agrupar tareas en métricas (ej: por sprint, por categoría).
+- `git_commit` permite vincular la tarea con un commit específico. Se muestra en el historial de status y en el dashboard.
+- `parent_task_id` establece una relación parent-child. La tarea se muestra como sub-tarea de la padre. El store valida que no se creen ciclos.
 
 ---
 
@@ -525,3 +529,148 @@ Exporta tareas como string CSV con filtros opcionales.
 - Columnas: `task_id`, `title`, `type`, `status`, `project`, `created_at`, `completed_at`, `tags`.
 - Los mismos filtros que `get_metrics`: sin filtros = todo, fechas = rango, proyecto = single, ambos = combinado.
 - Para descargar el CSV desde el navegador, usá `GET /api/export/csv` (devuelve archivo con header `Content-Disposition`).
+
+---
+
+## 13. `update_task` — Actualizar tarea
+
+Actualiza campos de una tarea existente. Solo se modifican los campos que se pasan (no-None).
+
+### Parámetros
+
+| Parámetro | Tipo | Requerido | Default | Descripción |
+|-----------|------|-----------|---------|-------------|
+| `task_id` | `str` | Sí | — | ID de la tarea |
+| `title` | `str` | No | `None` | Nuevo título |
+| `description` | `str` | No | `None` | Nueva descripción |
+| `type` | `str` | No | `None` | Nuevo tipo de tarea |
+| `priority` | `str` | No | `None` | Nueva prioridad |
+| `status` | `str` | No | `None` | Nuevo status |
+| `tags` | `list[str]` | No | `None` | Nueva lista de tags (reemplaza los existentes) |
+| `git_commit` | `str` | No | `None` | Hash del commit asociado |
+| `parent_task_id` | `str` | No | `_SENTINEL` | ID de la tarea padre (`_SENTINEL` = no cambiar, `None` = quitar padre) |
+
+### Ejemplo de respuesta
+
+```json
+{
+  "status": "success",
+  "data": {
+    "task_id": "myproj_001",
+    "title": "Configurar CI/CD con GitHub Actions",
+    "status": "in_progress",
+    "priority": "high",
+    "git_commit": "abc1234",
+    "parent_task_id": "myproj_000"
+  }
+}
+```
+
+### Notas
+
+- Solo se actualizan los campos que no son `None` (excepto `parent_task_id` que usa `_SENTINEL`).
+- Si cambia el `status`, se registra entrada en `task_history` automáticamente con transición.
+- `parent_task_id` usa el patrón `_SENTINEL` para distinguir "no se pasó el parámetro" de "quiere limpiar el padre" (`None`).
+- El store valida que no se creen ciclos en la jerarquía parent-child.
+
+---
+
+## 14. `get_task_history` — Historial de status
+
+Obtiene el historial de transiciones de status de una tarea.
+
+### Parámetros
+
+| Parámetro | Tipo | Requerido | Default | Descripción |
+|-----------|------|-----------|---------|-------------|
+| `task_id` | `str` | Sí | — | ID de la tarea |
+
+### Ejemplo de respuesta
+
+```json
+{
+  "status": "success",
+  "data": [
+    {
+      "from_status": null,
+      "to_status": "todo",
+      "at": "2026-04-26 14:30:00",
+      "note": "",
+      "git_commit": null
+    },
+    {
+      "from_status": "todo",
+      "to_status": "in_progress",
+      "at": "2026-04-27 09:00:00",
+      "note": "Starting work",
+      "git_commit": "abc1234"
+    }
+  ]
+}
+```
+
+### Notas
+
+- Devuelve lista ordenada por timestamp DESC (más reciente primero).
+- Incluye la entrada de creación (`from_status: NULL → to_status: "todo"`).
+- Cada entrada tiene `from_status`, `to_status`, `at`, `note` y `git_commit`.
+
+---
+
+## 15. `task_add_tag` — Agregar tag atómicamente
+
+Agrega un tag a una tarea de forma atómica (sin race conditions).
+
+### Parámetros
+
+| Parámetro | Tipo | Requerido | Default | Descripción |
+|-----------|------|-----------|---------|-------------|
+| `task_id` | `str` | Sí | — | ID de la tarea |
+| `tag` | `str` | Sí | — | Tag a agregar |
+
+### Ejemplo de respuesta
+
+```json
+{
+  "status": "success",
+  "data": {
+    "task_id": "myproj_001",
+    "tags": ["ci", "infra", "urgent"]
+  }
+}
+```
+
+### Notas
+
+- Operación atómica — no hay race conditions entre lecturas y escrituras.
+- Si el tag ya existe, es un no-op (no da error, no duplica).
+
+---
+
+## 16. `task_remove_tag` — Remover tag atómicamente
+
+Remueve un tag de una tarea de forma atómica.
+
+### Parámetros
+
+| Parámetro | Tipo | Requerido | Default | Descripción |
+|-----------|------|-----------|---------|-------------|
+| `task_id` | `str` | Sí | — | ID de la tarea |
+| `tag` | `str` | Sí | — | Tag a remover |
+
+### Ejemplo de respuesta
+
+```json
+{
+  "status": "success",
+  "data": {
+    "task_id": "myproj_001",
+    "tags": ["ci", "infra"]
+  }
+}
+```
+
+### Notas
+
+- Operación atómica — no hay race conditions entre lecturas y escrituras.
+- Si el tag no existe, es un no-op (no da error).

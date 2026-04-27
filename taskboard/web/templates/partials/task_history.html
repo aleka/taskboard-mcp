@@ -1,0 +1,26 @@
+{% if history and history|length > 0 %}
+<div class="history-timeline">
+    {% for entry in history %}
+    <div class="history-entry">
+        <div class="history-status-change">
+            {% if entry.from_status %}
+            <span class="badge badge-{{ entry.from_status }}">{{ entry.from_status }}</span>
+            <span class="history-arrow">&rarr;</span>
+            {% endif %}
+            <span class="badge badge-{{ entry.to_status }}">{{ entry.to_status }}</span>
+        </div>
+        <div class="history-meta">
+            <span class="history-time">{{ entry.at }}</span>
+            {% if entry.note %}
+            <span class="history-note">{{ entry.note }}</span>
+            {% endif %}
+            {% if entry.git_commit %}
+            <span class="history-commit"><code>{{ entry.git_commit }}</code></span>
+            {% endif %}
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<p class="empty-state">No status history recorded.</p>
+{% endif %}

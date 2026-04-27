@@ -81,20 +81,35 @@ async def task_detail(request: Request) -> JSONResponse:
 
 
 async def task_update(request: Request) -> JSONResponse:
-    """PATCH /api/tasks/{task_id} — update task status."""
+    """PATCH /api/tasks/{task_id} — update task fields.
+
+    Accepts JSON body with any updatable fields: title, description, type,
+    priority, status, git_commit, parent_task_id. At least one field is
+    recommended but not required (empty body returns unchanged task).
+    Status changes are recorded in task history.
+    """
     store = _get_store(request)
     task_id = request.path_params["task_id"]
     try:
         body = await request.json()
-        status = body.get("status")
-        if not status:
-            return _error("Field 'status' is required", 400)
 
-        task = store.update_task_status(
-            task_id=task_id,
-            status=status,
-            note=body.get("note", ""),
-        )
+        update_kwargs: dict[str, str | None] = {}
+        if body.get("title"):
+            update_kwargs["title"] = str(body["title"])
+        if body.get("description") is not None:
+            update_kwargs["description"] = str(body["description"])
+        if body.get("type"):
+            update_kwargs["type"] = str(body["type"])
+        if body.get("priority"):
+            update_kwargs["priority"] = str(body["priority"])
+        if body.get("status"):
+            update_kwargs["status"] = str(body["status"])
+        if body.get("git_commit") is not None:
+            update_kwargs["git_commit"] = str(body["git_commit"])
+        if "parent_task_id" in body:
+            update_kwargs["parent_task_id"] = body["parent_task_id"]
+
+        task = store.update_task(task_id=task_id, **update_kwargs)
         return _json({"task": task})
     except ValueError as exc:
         return _error(str(exc), 404)

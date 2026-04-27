@@ -139,3 +139,29 @@ async def recent_activity(request: Request) -> HTMLResponse:
         "partials/recent_activity.html",
         {"recent_tasks": recent_tasks, "project_slugs": project_slugs},
     )
+
+
+# ── V2: Task History Partial ──────────────────────────────────────────
+
+
+async def task_history(request: Request) -> HTMLResponse:
+    """GET /partials/task-history/{task_id} — history timeline fragment."""
+    store = _get_store(request)
+    templates = _get_templates(request)
+
+    task_id = request.path_params["task_id"]
+    task = store.get_task(task_id)
+
+    if task is None:
+        return HTMLResponse(
+            content='<div class="error-msg">Task not found</div>',
+            status_code=404,
+        )
+
+    history = store.get_task_history(task_id)
+
+    return templates.TemplateResponse(
+        request,
+        "partials/task_history.html",
+        {"history": history, "task": task},
+    )

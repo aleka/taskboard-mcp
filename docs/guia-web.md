@@ -85,6 +85,11 @@ Vista individual de una tarea con toda su metadata y contenido.
 - Fechas de creación y completitud
 - Tags asignados
 - Navegación prev/next dentro del mismo proyecto
+- Botón Editar → `/tasks/{task_id}/edit`
+- Botón Eliminar con `hx-confirm="¿Eliminar esta tarea?"`
+- Timeline de historial de status (transiciones con timestamps, notas y git commits)
+- Tarea padre: si tiene `parent_task_id`, muestra link + título de la tarea padre
+- Sub-tareas: si tiene tareas hijas, muestra lista de children tasks
 
 **Path params:**
 
@@ -103,6 +108,25 @@ Vista individual de una tarea con toda su metadata y contenido.
 **Notas:**
 - Usa `store.get_task_neighbors()` para generar links prev/next ordenados por `created_at`.
 - Si el `task_id` no existe, devuelve 404.
+
+---
+
+### `/tasks/{task_id}/edit` — Editar tarea
+
+Formulario de edición pre-llenado con todos los campos de la tarea.
+
+**Contenido:**
+- Form con campos: title, description, type, priority, status, tags (comma-separated), git_commit, parent_task_id (dropdown)
+- Submit via POST a `/actions/tasks/{task_id}/edit`
+- Link para volver al detalle de la tarea
+
+**Datos inyectados al template:**
+
+| Variable | Tipo | Descripción |
+|----------|------|-------------|
+| `task` | `dict \| None` | Datos actuales de la tarea |
+| `project_tasks` | `list[dict]` | Tareas del mismo proyecto (para dropdown parent_task_id) |
+| `project_slug` | `str` | Slug del proyecto para links |
 
 ---
 
@@ -263,6 +287,65 @@ Actualiza el status de una tarea y devuelve la fila actualizada.
 
 ---
 
+### `POST /actions/tasks/{task_id}/edit` — Editar tarea
+
+Actualiza los campos de una tarea y redirige al detalle.
+
+**Path params:**
+
+| Parámetro | Tipo | Descripción |
+|-----------|------|-------------|
+| `task_id` | `str` | ID de la tarea |
+
+**Campos del form:**
+
+| Campo | Tipo | Requerido | Default | Descripción |
+|-------|------|-----------|---------|-------------|
+| `title` | `str` | Sí | — | Título de la tarea |
+| `description` | `str` | No | `""` | Descripción o notas |
+| `type` | `str` | No | `"chore"` | Tipo de tarea |
+| `priority` | `str` | No | `"medium"` | Prioridad |
+| `status` | `str` | No | — | Status actual |
+| `tags` | `str` | No | `""` | Tags separados por coma (se parsean y aplican vía diff atómico) |
+| `git_commit` | `str` | No | `""` | Hash del commit asociado |
+| `parent_task_id` | `str` | No | `""` | ID de la tarea padre (vacío = sin padre) |
+
+**Respuestas:**
+
+| Caso | Status | Contenido |
+|------|--------|-----------|
+| Éxito | 303 | Redirect a `/tasks/{task_id}` |
+| Error | 400 | Mensaje de error |
+| No encontrada | 404 | Mensaje de error |
+
+**Notas:**
+- Los tags se parsean de un string separado por comas y se aplica un diff atómico: se removen los que ya no están y se agregan los nuevos via `add_tag`/`remove_tag`.
+- Si el status cambia, se registra entrada en `task_history` automáticamente.
+
+---
+
+### `POST /actions/tasks/{task_id}/delete` — Eliminar tarea
+
+Elimina una tarea y redirige a la página del proyecto.
+
+**Path params:**
+
+| Parámetro | Tipo | Descripción |
+|-----------|------|-------------|
+| `task_id` | `str` | ID de la tarea |
+
+**Respuestas:**
+
+| Caso | Status | Contenido |
+|------|--------|-----------|
+| Éxito | 303 | Redirect a `/projects/{slug}` |
+| No encontrada | 404 | Mensaje de error |
+
+**Notas:**
+- El botón en el template usa `hx-confirm="¿Eliminar esta tarea?"` para confirmación antes de enviar.
+
+---
+
 ## HTMX Partials (GET `/partials/*`)
 
 Fragments HTML para swaps dinámicos sin recargar la página. Definidos en `taskboard/web/routes/partials.py`.
@@ -332,6 +415,25 @@ Devuelve los grupos de timeline como fragmento HTML.
 
 ---
 
+### `GET /partials/task-history/{task_id}` — Timeline de historial
+
+Devuelve un fragmento HTML con la timeline de transiciones de status de una tarea.
+
+**Path params:**
+
+| Parámetro | Tipo | Descripción |
+|-----------|------|-------------|
+| `task_id` | `str` | ID de la tarea |
+
+**Template:** `partials/task_history.html`
+
+**Contenido del fragmento:**
+- Lista de transiciones ordenadas por timestamp DESC
+- Cada entrada muestra: `from_status → to_status`, timestamp, nota, git_commit (si tiene)
+- Incluye la entrada de creación (NULL → `todo`)
+
+---
+
 ## REST API (`/api/*`)
 
 Endpoints JSON para acceso programático. Definidos en `taskboard/web/routes/api.py`.
@@ -345,7 +447,7 @@ Endpoints JSON para acceso programático. Definidos en `taskboard/web/routes/api
 | `GET` | `/api/tasks` | Listar tareas con filtros (query params) |
 | `POST` | `/api/tasks` | Crear tarea (JSON body) → 201 |
 | `GET` | `/api/tasks/{task_id}` | Detalle de tarea → 404 si no existe |
-| `PATCH` | `/api/tasks/{task_id}` | Actualizar status (JSON body con `status`) |
+| `PATCH` | `/api/tasks/{task_id}` | Actualizar campos de tarea (JSON body con campos a actualizar: title, description, type, priority, status, tags, git_commit, parent_task_id) → devuelve tarea actualizada |
 | `DELETE` | `/api/tasks/{task_id}` | Eliminar tarea → `{"deleted": true}` |
 | `GET` | `/api/projects` | Listar todos los proyectos |
 | `POST` | `/api/projects` | Crear proyecto (JSON body) → 201 |

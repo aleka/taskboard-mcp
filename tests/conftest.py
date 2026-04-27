@@ -137,6 +137,7 @@ def _init_schema(conn: sqlite3.Connection) -> None:
           summary TEXT NOT NULL DEFAULT '',
           tags TEXT NOT NULL DEFAULT '[]',
           description TEXT NOT NULL DEFAULT '',
+          parent_task_id TEXT,
           FOREIGN KEY (project_name) REFERENCES projects(name) ON UPDATE CASCADE
         );
 
@@ -164,4 +165,5 @@ def _init_schema(conn: sqlite3.Connection) -> None:
         CREATE INDEX IF NOT EXISTS idx_tasks_source ON tasks(source);
         CREATE INDEX IF NOT EXISTS idx_history_task ON task_history(task_id);
         CREATE INDEX IF NOT EXISTS idx_history_at ON task_history(at);
+        CREATE INDEX IF NOT EXISTS idx_tasks_parent ON tasks(parent_task_id);
     """)

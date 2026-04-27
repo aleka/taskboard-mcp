@@ -47,6 +47,8 @@ class TestAddTask:
             description="",
             tags=None,
             priority="medium",
+            git_commit=None,
+            parent_task_id=None,
         )
 
     def test_invalid_project(self):
@@ -718,3 +720,147 @@ class TestMcpServerErrorPaths:
             assert store is store2
         finally:
             mod._store = original
+
+
+# ── V2 MCP Tools ─────────────────────────────────────────────────────
+
+
+class TestAddTaskV2Params:
+    """Tests for add_task with new git_commit and parent_task_id params."""
+
+    def test_add_task_with_git_commit(self):
+        """add_task passes git_commit to store."""
+        func = _make_tool_func("add_task")
+        mock_task = {"task_id": "tp_001", "title": "Commit task", "status": "todo"}
+        ctx, store = _patch_store()
+        store.add_task.return_value = mock_task
+
+        with ctx:
+            result = func(project="testproj", title="Commit task", git_commit="abc123")
+
+        assert result["status"] == "success"
+        store.add_task.assert_called_once()
+        call_kwargs = store.add_task.call_args[1]
+        assert call_kwargs["git_commit"] == "abc123"
+
+    def test_add_task_with_parent(self):
+        """add_task passes parent_task_id to store."""
+        func = _make_tool_func("add_task")
+        mock_task = {"task_id": "tp_002", "title": "Child task", "status": "todo"}
+        ctx, store = _patch_store()
+        store.add_task.return_value = mock_task
+
+        with ctx:
+            result = func(project="testproj", title="Child task", parent_task_id="tp_001")
+
+        assert result["status"] == "success"
+        call_kwargs = store.add_task.call_args[1]
+        assert call_kwargs["parent_task_id"] == "tp_001"
+
+
+class TestTaskAddTag:
+    """Tests for task_add_tag MCP tool."""
+
+    def test_add_tag_success(self):
+        func = _make_tool_func("task_add_tag")
+        mock_task = {"task_id": "tp_001", "tags": '["urgent"]'}
+        ctx, store = _patch_store()
+        store.add_tag.return_value = mock_task
+
+        with ctx:
+            result = func(task_id="tp_001", tag="urgent")
+
+        assert result["status"] == "success"
+        store.add_tag.assert_called_once_with(task_id="tp_001", tag="urgent")
+
+    def test_add_tag_error(self):
+        func = _make_tool_func("task_add_tag")
+        ctx, store = _patch_store()
+        store.add_tag.side_effect = ValueError("Task 'tp_999' not found")
+
+        with ctx:
+            result = func(task_id="tp_999", tag="x")
+
+        assert result["status"] == "error"
+
+
+class TestTaskRemoveTag:
+    """Tests for task_remove_tag MCP tool."""
+
+    def test_remove_tag_success(self):
+        func = _make_tool_func("task_remove_tag")
+        mock_task = {"task_id": "tp_001", "tags": "[]"}
+        ctx, store = _patch_store()
+        store.remove_tag.return_value = mock_task
+
+        with ctx:
+            result = func(task_id="tp_001", tag="urgent")
+
+        assert result["status"] == "success"
+        store.remove_tag.assert_called_once_with(task_id="tp_001", tag="urgent")
+
+    def test_remove_tag_error(self):
+        func = _make_tool_func("task_remove_tag")
+        ctx, store = _patch_store()
+        store.remove_tag.side_effect = ValueError("Task not found")
+
+        with ctx:
+            result = func(task_id="tp_999", tag="x")
+
+        assert result["status"] == "error"
+
+
+class TestGetTaskHistoryMCP:
+    """Tests for get_task_history MCP tool."""
+
+    def test_history_success(self):
+        func = _make_tool_func("get_task_history")
+        mock_history = [{"to_status": "done", "from_status": "todo", "at": "2026-01-01"}]
+        ctx, store = _patch_store()
+        store.get_task_history.return_value = mock_history
+
+        with ctx:
+            result = func(task_id="tp_001")
+
+        assert result["status"] == "success"
+        assert result["data"] == mock_history
+        store.get_task_history.assert_called_once_with(task_id="tp_001")
+
+    def test_history_empty(self):
+        func = _make_tool_func("get_task_history")
+        ctx, store = _patch_store()
+        store.get_task_history.return_value = []
+
+        with ctx:
+            result = func(task_id="tp_001")
+
+        assert result["status"] == "success"
+        assert result["data"] == []
+
+
+class TestUpdateTaskMCP:
+    """Tests for update_task MCP tool."""
+
+    def test_update_success(self):
+        func = _make_tool_func("update_task")
+        mock_task = {"task_id": "tp_001", "title": "Updated", "status": "in_progress"}
+        ctx, store = _patch_store()
+        store.update_task.return_value = mock_task
+
+        with ctx:
+            result = func(task_id="tp_001", title="Updated", status="in_progress")
+
+        assert result["status"] == "success"
+        store.update_task.assert_called_once_with(
+            task_id="tp_001", title="Updated", status="in_progress", parent_task_id=None
+        )
+
+    def test_update_error(self):
+        func = _make_tool_func("update_task")
+        ctx, store = _patch_store()
+        store.update_task.side_effect = ValueError("Task not found")
+
+        with ctx:
+            result = func(task_id="tp_999", title="X")
+
+        assert result["status"] == "error"

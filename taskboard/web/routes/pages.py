@@ -224,3 +224,37 @@ async def reports_view(request: Request) -> HTMLResponse:
             "has_filters": bool(start_date or end_date or project),
         },
     )
+
+
+# ── V2: Task Edit Page ───────────────────────────────────────────────
+
+
+async def task_edit(request: Request) -> HTMLResponse:
+    """GET /tasks/{task_id}/edit — edit form pre-filled with task data."""
+    store = _get_store(request)
+    templates = _get_templates(request)
+
+    task_id = request.path_params["task_id"]
+    task = store.get_task(task_id)
+
+    if task is None:
+        return templates.TemplateResponse(
+            request,
+            "task_edit.html",
+            {"task": None, "task_id": task_id},
+            status_code=404,
+        )
+
+    tags = json.loads(task.get("tags", "[]")) if task.get("tags") else []
+    project_tasks = store.list_tasks(project=task["project_name"], limit=500)
+
+    return templates.TemplateResponse(
+        request,
+        "task_edit.html",
+        {
+            "task": task,
+            "task_id": task_id,
+            "tags": tags,
+            "project_tasks": project_tasks,
+        },
+    )

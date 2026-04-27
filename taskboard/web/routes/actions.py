@@ -9,6 +9,7 @@ programmatic JSON access.
 from __future__ import annotations
 
 import html
+import json
 
 from starlette.requests import Request
 from starlette.responses import HTMLResponse, RedirectResponse
@@ -272,3 +273,109 @@ async def refresh_dashboard_section(request: Request) -> HTMLResponse:
         )
 
     return HTMLResponse("Invalid section", status_code=400)
+
+
+# ── Action: Edit Task (V2-15) ────────────────────────────────────────
+
+
+async def edit_task(request: Request) -> HTMLResponse | RedirectResponse:
+    """POST /actions/tasks/{task_id}/edit — update task fields from edit form.
+
+    Accepts form-encoded data: title, description, type, priority, status,
+    git_commit, tags, parent_task_id.
+    Redirects to task detail page on success.
+    """
+    store = _get_store(request)
+    task_id = request.path_params["task_id"]
+    form = await request.form()
+
+    try:
+        update_kwargs: dict[str, str | None] = {}
+        if form.get("title"):
+            update_kwargs["title"] = str(form["title"])
+        if form.get("description") is not None:
+            update_kwargs["description"] = str(form["description"])
+        if form.get("type"):
+            update_kwargs["type"] = str(form["type"])
+        if form.get("priority"):
+            update_kwargs["priority"] = str(form["priority"])
+        if form.get("status"):
+            update_kwargs["status"] = str(form["status"])
+        if form.get("git_commit"):
+            update_kwargs["git_commit"] = str(form["git_commit"])
+
+        # Parent: empty string means clear
+        parent_raw = str(form.get("parent_task_id", ""))
+        update_kwargs["parent_task_id"] = parent_raw if parent_raw else None
+
+        store.update_task(task_id=task_id, **update_kwargs)
+
+        # Tags: comma-separated string → atomic add_tag/remove_tag operations
+        # Do this AFTER update_task since it doesn't accept tags param
+        tags_raw = str(form.get("tags", ""))
+        if tags_raw.strip():
+            new_tags = [t.strip() for t in tags_raw.split(",") if t.strip()]
+            # Get current tags
+            task = store.get_task(task_id)
+            if task:
+                current_tags: list[str] = json.loads(task["tags"])
+                # Remove old tags not in new list
+                for old_tag in current_tags:
+                    if old_tag not in new_tags:
+                        store.remove_tag(task_id, old_tag)
+                # Add new tags not already present
+                for new_tag in new_tags:
+                    if new_tag not in current_tags:
+                        store.add_tag(task_id, new_tag)
+        else:
+            # Empty tags field → clear all tags
+            task = store.get_task(task_id)
+            if task:
+                current_tags = json.loads(task["tags"])
+                for old_tag in current_tags:
+                    store.remove_tag(task_id, old_tag)
+    except ValueError as exc:
+        return HTMLResponse(
+            content=f'<span class="error-msg">{html.escape(str(exc))}</span>',
+            status_code=404,
+        )
+    except Exception:
+        return HTMLResponse(
+            content='<span class="error-msg">Internal error updating task.</span>',
+            status_code=500,
+        )
+
+    return RedirectResponse(url=f"/tasks/{task_id}", status_code=303)
+
+
+# ── Action: Delete Task (V2-16) ──────────────────────────────────────
+
+
+async def delete_task(request: Request) -> HTMLResponse | RedirectResponse:
+    """POST /actions/tasks/{task_id}/delete — delete task with confirmation.
+
+    Requires hx-confirm on the triggering element. Redirects to the
+    project page on success.
+    """
+    store = _get_store(request)
+    task_id = request.path_params["task_id"]
+
+    try:
+        task = store.get_task(task_id)
+        if task is None:
+            return HTMLResponse(
+                content=f'<span class="error-msg">Task {html.escape(task_id)} not found</span>',
+                status_code=404,
+            )
+        project_name = task["project_name"]
+        store.delete_task(task_id=task_id)
+    except Exception as exc:
+        return HTMLResponse(
+            content=f'<span class="error-msg">Error deleting task: {html.escape(str(exc))}</span>',
+            status_code=500,
+        )
+
+    # Redirect to project page
+    proj = store.get_project_by_name(project_name)
+    slug = proj["slug"] if proj else project_name
+    return RedirectResponse(url=f"/projects/{slug}", status_code=303)

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 import pytest
 
 
@@ -516,3 +518,149 @@ class TestHTMXErrorHandling:
     def test_base_template_has_error_handler(self, client):
         r = client.get("/")
         assert "hx-on::response-error" in r.text
+
+
+# ── V2 Web Routes ────────────────────────────────────────────────────
+
+
+class TestActionDeleteTask:
+    """POST /actions/tasks/{task_id}/delete — delete task from web UI."""
+
+    def test_delete_task_redirects_to_project(self, seeded_client):
+        """Deleting a task redirects to the project page."""
+        # First create a task to delete
+        r = seeded_client.post(
+            "/actions/tasks",
+            data={"project": "testproj", "title": "To Delete", "type": "chore", "priority": "medium"},
+            follow_redirects=False,
+        )
+        assert r.status_code == 303
+        # Get the task from the project page
+        r = seeded_client.get("/projects/tp")
+        assert "To Delete" in r.text
+
+    def test_delete_nonexistent_returns_error(self, client):
+        """Deleting a non-existent task returns error message."""
+        r = client.post("/actions/tasks/nonexistent_001/delete")
+        assert r.status_code == 404
+
+
+class TestActionEditTask:
+    """POST /actions/tasks/{task_id}/edit — edit task fields."""
+
+    def test_edit_task_title(self, seeded_client):
+        """Editing a task updates the title and redirects."""
+        # Create a task first
+        seeded_client.post(
+            "/actions/tasks",
+            data={"project": "testproj", "title": "Edit Me", "type": "chore", "priority": "medium"},
+        )
+        # Edit it via the action
+        r = seeded_client.post(
+            "/actions/tasks/tp_002/edit",
+            data={"title": "Edited Title", "priority": "high"},
+            follow_redirects=False,
+        )
+        assert r.status_code == 303
+
+    def test_edit_nonexistent_returns_error(self, client):
+        """Editing a non-existent task returns error."""
+        r = client.post("/actions/tasks/nonexistent_001/edit", data={"title": "X"})
+        assert r.status_code == 404
+
+    def test_edit_task_tags_from_comma_separated_string(self, seeded_client):
+        """Editing tags via form-encoded POST parses comma-separated string to JSON list."""
+        seeded_client.post(
+            "/actions/tasks",
+            data={"project": "testproj", "title": "Tag Edit Test", "type": "chore", "priority": "medium"},
+        )
+        r = seeded_client.post(
+            "/actions/tasks/tp_002/edit",
+            data={"tags": "urgent,review"},
+            follow_redirects=False,
+        )
+        assert r.status_code == 303
+        # Verify tags were stored correctly (tags is a JSON string in DB)
+        r = seeded_client.get("/api/tasks/tp_002")
+        tags = json.loads(r.json()["task"]["tags"])
+        assert "urgent" in tags
+        assert "review" in tags
+
+    def test_edit_task_tags_with_whitespace(self, seeded_client):
+        """Tags with surrounding whitespace are trimmed."""
+        seeded_client.post(
+            "/actions/tasks",
+            data={"project": "testproj", "title": "Whitespace Tags", "type": "chore", "priority": "medium"},
+        )
+        r = seeded_client.post(
+            "/actions/tasks/tp_002/edit",
+            data={"tags": " urgent , review "},
+            follow_redirects=False,
+        )
+        assert r.status_code == 303
+        r = seeded_client.get("/api/tasks/tp_002")
+        tags = json.loads(r.json()["task"]["tags"])
+        assert "urgent" in tags
+        assert "review" in tags
+        # No whitespace-padded tags
+        assert " urgent " not in tags
+
+    def test_edit_task_empty_tags_clears_all(self, seeded_client):
+        """Empty tags field clears all tags from the task."""
+        seeded_client.post(
+            "/actions/tasks",
+            data={"project": "testproj", "title": "Clear Tags", "type": "chore", "priority": "medium"},
+        )
+        # First add some tags
+        seeded_client.post(
+            "/actions/tasks/tp_002/edit",
+            data={"tags": "alpha,beta"},
+            follow_redirects=False,
+        )
+        # Now clear them
+        r = seeded_client.post(
+            "/actions/tasks/tp_002/edit",
+            data={"tags": ""},
+            follow_redirects=False,
+        )
+        assert r.status_code == 303
+        r = seeded_client.get("/api/tasks/tp_002")
+        tags = json.loads(r.json()["task"]["tags"])
+        assert tags == []
+
+
+class TestPageEditTask:
+    """GET /tasks/{task_id}/edit — edit task page."""
+
+    def test_edit_page_200(self, seeded_client):
+        """Edit page loads for an existing task."""
+        seeded_client.post(
+            "/actions/tasks",
+            data={"project": "testproj", "title": "Editable", "type": "chore", "priority": "medium"},
+        )
+        r = seeded_client.get("/tasks/tp_002/edit")
+        assert r.status_code == 200
+        assert "Editable" in r.text
+
+    def test_edit_page_404(self, client):
+        """Edit page returns 404 for non-existent task."""
+        r = client.get("/tasks/nonexistent_001/edit")
+        assert r.status_code == 404
+
+
+class TestPartialHistoryTimeline:
+    """GET /partials/task-history/{task_id} — history timeline fragment."""
+
+    def test_history_partial_200(self, seeded_client):
+        """History partial returns 200 for existing task."""
+        seeded_client.post(
+            "/actions/tasks",
+            data={"project": "testproj", "title": "History Task", "type": "chore", "priority": "medium"},
+        )
+        r = seeded_client.get("/partials/task-history/tp_002")
+        assert r.status_code == 200
+
+    def test_history_partial_404(self, client):
+        """History partial returns 404 for non-existent task."""
+        r = client.get("/partials/task-history/nonexistent_001")
+        assert r.status_code == 404

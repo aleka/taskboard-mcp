@@ -16,8 +16,62 @@ import json
 import os
 import sqlite3
 import threading
+from collections import OrderedDict
 from datetime import datetime, timedelta
-from typing import Any
+from typing import Any, Callable
+
+
+# ── Sentinel for distinguishing "not passed" from "set to None" ──────
+
+_SENTINEL = object()
+
+# ── Migration Framework ──────────────────────────────────────────────
+
+
+def _migrate_v2(conn: sqlite3.Connection) -> None:
+    """Add parent_task_id column and index for task hierarchy (v1→v2).
+
+    Idempotent: checks if column already exists before ALTER TABLE.
+    """
+    columns = [r[1] for r in conn.execute("PRAGMA table_info(tasks)").fetchall()]
+    if "parent_task_id" not in columns:
+        conn.execute(
+            "ALTER TABLE tasks ADD COLUMN parent_task_id TEXT REFERENCES tasks(task_id)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_tasks_parent ON tasks(parent_task_id)"
+        )
+
+
+_MIGRATIONS: OrderedDict[int, Callable[[sqlite3.Connection], None]] = OrderedDict(
+    {2: _migrate_v2}
+)
+
+
+def _run_migrations(conn: sqlite3.Connection) -> None:
+    """Run pending schema migrations based on meta.schema_version.
+
+    For in-memory databases (testing), this is a no-op since the
+    persistent connection check in `_connect()` skips migration.
+    """
+    # Check if meta table exists (might not on raw in-memory DBs)
+    tables = [r[0] for r in conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='meta'"
+    ).fetchall()]
+    if "meta" not in tables:
+        return
+    row = conn.execute(
+        "SELECT value FROM meta WHERE key = 'schema_version'"
+    ).fetchone()
+    current = int(row[0]) if row else 1
+    for version in sorted(_MIGRATIONS):
+        if version > current:
+            _MIGRATIONS[version](conn)
+            conn.execute(
+                "INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', ?)",
+                (str(version),),
+            )
+            conn.commit()
 
 
 class TaskboardStore:
@@ -56,7 +110,8 @@ class TaskboardStore:
         """Open a fresh connection with WAL, busy_timeout, FK.
 
         For in-memory databases (testing), returns a persistent connection
-        so the data survives across calls.
+        so the data survives across calls. Migrations are skipped for
+        in-memory databases since conftest creates the schema directly.
         """
         if self._persistent_conn is not None:
             return self._persistent_conn
@@ -65,6 +120,7 @@ class TaskboardStore:
         conn.execute("PRAGMA busy_timeout = 5000")
         conn.execute("PRAGMA foreign_keys = ON")
         conn.row_factory = sqlite3.Row
+        _run_migrations(conn)
         return conn
 
     def _close(self, conn: sqlite3.Connection) -> None:
@@ -222,6 +278,8 @@ class TaskboardStore:
         tags: list[str] | None = None,
         priority: str = "medium",
         source: str = "manual",
+        git_commit: str | None = None,
+        parent_task_id: str | None = None,
     ) -> dict[str, Any]:
         """Create a new task with auto-generated ``{slug}_{NNN}`` ID."""
         tags_json = json.dumps(tags or [])
@@ -232,9 +290,11 @@ class TaskboardStore:
                 task_id = self._generate_task_id(conn, project)
                 conn.execute(
                     "INSERT INTO tasks "
-                    "(task_id, title, type, project_name, status, source, priority, summary, tags, description, created_at) "
-                    "VALUES (?, ?, ?, ?, 'todo', ?, ?, '', ?, ?, ?)",
-                    (task_id, title, type, project, source, priority, tags_json, description, now),
+                    "(task_id, title, type, project_name, status, source, priority, "
+                    "summary, tags, description, created_at, git_commit, parent_task_id) "
+                    "VALUES (?, ?, ?, ?, 'todo', ?, ?, '', ?, ?, ?, ?, ?)",
+                    (task_id, title, type, project, source, priority,
+                     tags_json, description, now, git_commit, parent_task_id),
                 )
                 conn.execute(
                     "INSERT INTO task_history (task_id, from_status, to_status, note, git_commit) "
@@ -430,6 +490,236 @@ class TaskboardStore:
             finally:
                 self._close(conn)
         return True
+
+    # ── Generic update (V2-05) ────────────────────────────────────────
+
+    def update_task(
+        self,
+        task_id: str,
+        *,
+        title: str | None = None,
+        description: str | None = None,
+        priority: str | None = None,
+        type: str | None = None,
+        status: str | None = None,
+        git_commit: str | None = None,
+        parent_task_id: str | None | object = _SENTINEL,
+    ) -> dict[str, Any]:
+        """Update editable fields on a task.
+
+        Only non-None params become SET clauses. Use ``parent_task_id=None``
+        to clear the parent (``_SENTINEL`` means "not passed").
+        Records history if status changes.
+        """
+        with self._write_lock:
+            conn = self._connect()
+            try:
+                task = conn.execute(
+                    "SELECT * FROM tasks WHERE task_id = ?", (task_id,)
+                ).fetchone()
+                if task is None:
+                    raise ValueError(f"Task '{task_id}' not found")
+
+                set_clauses: list[str] = []
+                params: list[Any] = []
+
+                field_map = {
+                    "title": title,
+                    "description": description,
+                    "priority": priority,
+                    "type": type,
+                    "status": status,
+                    "git_commit": git_commit,
+                }
+                for col, val in field_map.items():
+                    if val is not None:
+                        set_clauses.append(f"{col} = ?")
+                        params.append(val)
+
+                # parent_task_id uses sentinel — None means "clear"
+                if parent_task_id is not _SENTINEL:
+                    set_clauses.append("parent_task_id = ?")
+                    params.append(parent_task_id)
+
+                if not set_clauses:
+                    return self._row_to_dict(task)
+
+                # If status is changing, record history
+                new_status = field_map["status"]
+                if new_status is not None and new_status != task["status"]:
+                    conn.execute(
+                        "INSERT INTO task_history "
+                        "(task_id, from_status, to_status, note, git_commit) "
+                        "VALUES (?, ?, ?, 'Updated', NULL)",
+                        (task_id, task["status"], new_status),
+                    )
+
+                params.append(task_id)
+                conn.execute(
+                    f"UPDATE tasks SET {', '.join(set_clauses)} WHERE task_id = ?",
+                    params,
+                )
+                conn.commit()
+            finally:
+                self._close(conn)
+        return self.get_task(task_id)  # type: ignore[return-value]
+
+    # ── History read (V2-06) ──────────────────────────────────────────
+
+    def get_task_history(self, task_id: str) -> list[dict[str, Any]]:
+        """Return status transition history ordered by timestamp DESC."""
+        conn = self._connect()
+        try:
+            rows = conn.execute(
+                "SELECT from_status, to_status, at, note, git_commit "
+                "FROM task_history WHERE task_id = ? ORDER BY at DESC, id DESC",
+                (task_id,),
+            ).fetchall()
+            return [self._row_to_dict(r) for r in rows]
+        finally:
+            self._close(conn)
+
+    # ── Atomic tag operations (V2-09) ─────────────────────────────────
+
+    def add_tag(self, task_id: str, tag: str) -> dict[str, Any]:
+        """Atomically add a tag under write lock. No-op if already present."""
+        with self._write_lock:
+            conn = self._connect()
+            try:
+                task = conn.execute(
+                    "SELECT * FROM tasks WHERE task_id = ?", (task_id,)
+                ).fetchone()
+                if task is None:
+                    raise ValueError(f"Task '{task_id}' not found")
+
+                tags: list[str] = json.loads(task["tags"])
+                if tag not in tags:
+                    tags.append(tag)
+                    conn.execute(
+                        "UPDATE tasks SET tags = ? WHERE task_id = ?",
+                        (json.dumps(tags), task_id),
+                    )
+                    conn.commit()
+            finally:
+                self._close(conn)
+        return self.get_task(task_id)  # type: ignore[return-value]
+
+    def remove_tag(self, task_id: str, tag: str) -> dict[str, Any]:
+        """Atomically remove a tag under write lock. No-op if not present."""
+        with self._write_lock:
+            conn = self._connect()
+            try:
+                task = conn.execute(
+                    "SELECT * FROM tasks WHERE task_id = ?", (task_id,)
+                ).fetchone()
+                if task is None:
+                    raise ValueError(f"Task '{task_id}' not found")
+
+                tags: list[str] = json.loads(task["tags"])
+                if tag in tags:
+                    tags.remove(tag)
+                    conn.execute(
+                        "UPDATE tasks SET tags = ? WHERE task_id = ?",
+                        (json.dumps(tags), task_id),
+                    )
+                    conn.commit()
+            finally:
+                self._close(conn)
+        return self.get_task(task_id)  # type: ignore[return-value]
+
+    # ── Parent-child hierarchy (V2-07 + V2-08) ───────────────────────
+
+    def set_parent(
+        self, task_id: str, parent_task_id: str | None
+    ) -> dict[str, Any]:
+        """Set or clear parent. Raises ValueError on cycle or missing parent."""
+        with self._write_lock:
+            conn = self._connect()
+            try:
+                task = conn.execute(
+                    "SELECT * FROM tasks WHERE task_id = ?", (task_id,)
+                ).fetchone()
+                if task is None:
+                    raise ValueError(f"Task '{task_id}' not found")
+
+                if parent_task_id is not None:
+                    # Check self-reference
+                    if task_id == parent_task_id:
+                        raise ValueError(
+                            f"Task '{task_id}' cannot be its own parent"
+                        )
+                    # Check parent exists
+                    parent = conn.execute(
+                        "SELECT task_id FROM tasks WHERE task_id = ?",
+                        (parent_task_id,),
+                    ).fetchone()
+                    if parent is None:
+                        raise ValueError(
+                            f"Parent task '{parent_task_id}' not found"
+                        )
+                    # Check for cycles via recursive CTE
+                    self._check_cycle(conn, task_id, parent_task_id)
+
+                conn.execute(
+                    "UPDATE tasks SET parent_task_id = ? WHERE task_id = ?",
+                    (parent_task_id, task_id),
+                )
+                conn.commit()
+            finally:
+                self._close(conn)
+        return self.get_task(task_id)  # type: ignore[return-value]
+
+    def get_children(self, parent_task_id: str) -> list[dict[str, Any]]:
+        """Return all direct children of a task."""
+        conn = self._connect()
+        try:
+            rows = conn.execute(
+                "SELECT * FROM tasks WHERE parent_task_id = ?",
+                (parent_task_id,),
+            ).fetchall()
+            return [self._row_to_dict(r) for r in rows]
+        finally:
+            self._close(conn)
+
+    def get_parent(self, task_id: str) -> dict[str, Any] | None:
+        """Return the parent task dict, or None if no parent."""
+        conn = self._connect()
+        try:
+            row = conn.execute(
+                "SELECT p.* FROM tasks t "
+                "JOIN tasks p ON t.parent_task_id = p.task_id "
+                "WHERE t.task_id = ?",
+                (task_id,),
+            ).fetchone()
+            return self._row_to_dict(row) if row else None
+        finally:
+            self._close(conn)
+
+    def _check_cycle(
+        self, conn: sqlite3.Connection, task_id: str, proposed_parent: str
+    ) -> None:
+        """Raise ValueError if setting proposed_parent would create a cycle.
+
+        Uses recursive CTE to walk ancestor chain from proposed_parent upward.
+        If task_id appears in the ancestor chain, it's a cycle.
+        """
+        ancestors = conn.execute("""
+            WITH RECURSIVE ancestors(tid) AS (
+                VALUES(?)
+                UNION ALL
+                SELECT t.parent_task_id
+                FROM tasks t
+                INNER JOIN ancestors a ON t.task_id = a.tid
+                WHERE t.parent_task_id IS NOT NULL
+                LIMIT 20
+            )
+            SELECT tid FROM ancestors
+        """, (proposed_parent,)).fetchall()
+
+        if any(r["tid"] == task_id for r in ancestors):
+            raise ValueError(
+                f"Setting parent to '{proposed_parent}' would create a cycle"
+            )
 
     # ── Analytics ────────────────────────────────────────────────────
 

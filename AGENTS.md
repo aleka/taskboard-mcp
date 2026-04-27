@@ -12,7 +12,7 @@
 
 - Single process: Starlette mounts fastmcp at `/mcp`, serves web at `/`, API at `/api/`
 - `TaskboardStore` is the single source of truth — all routes/tools delegate to it
-- Zero schema changes — the SQLite schema is production data, never modify it
+- Schema evolves via versioned migrations in `store.py` `_connect()` — conftest creates v2 schema directly
 - `store.py` owns all SQL — no raw SQL in routes, templates, or MCP tools
 - Web routes in `taskboard/web/routes/`: `pages.py` (HTML), `api.py` (JSON), `actions.py` (HTMX form handlers), `partials.py` (HTMX fragments)
 

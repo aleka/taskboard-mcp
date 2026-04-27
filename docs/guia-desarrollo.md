@@ -39,7 +39,7 @@ Abrir http://localhost:7438 en el navegador.
 taskboard-mcp/
 ├── taskboard/
 │   ├── store.py              # FUENTE DE VERDAD — todas las interfaces delegan acá
-│   ├── mcp_server.py         # 12 herramientas MCP via fastmcp
+│   ├── mcp_server.py         # 16 herramientas MCP via fastmcp
 │   └── web/
 │       ├── app.py            # Starlette app factory (monta MCP + API + Web)
 │       ├── routes/
@@ -49,7 +49,7 @@ taskboard-mcp/
 │       │   └── partials.py   # HTMX fragments (GET /partials/*)
 │       ├── templates/        # Jinja2 templates
 │       └── static/           # CSS, JS, favicon
-├── tests/                    # 238 tests, 99% coverage
+├── tests/                    # 297 tests, 97% coverage
 └── docs/                     # Documentación
 ```
 
@@ -64,6 +64,17 @@ Un solo proceso Starlette (puerto 7438) sirve tres interfaces:
 | **Web** | `/` y rutas HTML | Jinja2 + HTMX |
 
 Todas las interfaces delegan a `TaskboardStore` — el store es la única fuente de verdad. No hay SQL fuera de `store.py`.
+
+### Schema Versioning
+
+El store usa migrations versionadas en `_connect()`. La tabla `meta` almacena `schema_version`.
+
+| Versión | Cambios |
+|---------|---------|
+| v1 | Schema original (projects, tasks, task_history, meta) |
+| v2 | `ALTER TABLE tasks ADD COLUMN parent_task_id TEXT DEFAULT NULL` + index |
+
+Las migrations corren idempotentemente al conectar. Tests usan schema v2 directamente (no migrations en `:memory:`).
 
 ### Convenciones de Rutas
 
@@ -103,10 +114,10 @@ uv run pytest tests/ -vv -s
 
 | Archivo | Qué prueba |
 |---------|------------|
-| `test_store.py` | CRUD de tareas/proyectos, métricas, timeline, CSV export |
-| `test_mcp_server.py` | Las 12 herramientas MCP |
-| `test_web_routes.py` | Rutas web (HTML + HTMX) |
-| `test_api_routes.py` | REST API endpoints (JSON) |
+| `test_store.py` | CRUD, métricas, timeline, CSV, migrations, update_task, history, parent-child, cycle detection, atomic tags |
+| `test_mcp_server.py` | Las 16 herramientas MCP (incluyendo update_task, tag ops, history) |
+| `test_web_routes.py` | Rutas web (HTML + HTMX) incluyendo edit, delete, history |
+| `test_api_routes.py` | REST API endpoints (JSON) incluyendo PATCH full update |
 
 ---
 
