@@ -418,9 +418,9 @@ class TaskboardStore:
             self._close(conn)
 
     def update_task_status(
-        self, task_id: str, status: str, note: str = ""
+        self, task_id: str, status: str, note: str = "", git_commit: str | None = None
     ) -> dict[str, Any]:
-        """Change task status and record a history entry."""
+        """Change task status, update completed_at, and record a history entry."""
         with self._write_lock:
             conn = self._connect()
             try:
@@ -430,13 +430,29 @@ class TaskboardStore:
                 if task is None:
                     raise ValueError(f"Task '{task_id}' not found")
                 old_status = task["status"]
-                conn.execute(
-                    "UPDATE tasks SET status = ? WHERE task_id = ?", (status, task_id)
-                )
+                now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+                # Update status + completed_at (set on done, clear on reopen)
+                if status == "done":
+                    conn.execute(
+                        "UPDATE tasks SET status = ?, completed_at = ?, "
+                        "git_commit = COALESCE(?, git_commit) WHERE task_id = ?",
+                        (status, now, git_commit, task_id),
+                    )
+                elif old_status == "done" and status != "done":
+                    conn.execute(
+                        "UPDATE tasks SET status = ?, completed_at = NULL WHERE task_id = ?",
+                        (status, task_id),
+                    )
+                else:
+                    conn.execute(
+                        "UPDATE tasks SET status = ? WHERE task_id = ?", (status, task_id)
+                    )
+
                 conn.execute(
                     "INSERT INTO task_history (task_id, from_status, to_status, note, git_commit) "
-                    "VALUES (?, ?, ?, ?, NULL)",
-                    (task_id, old_status, status, note),
+                    "VALUES (?, ?, ?, ?, ?)",
+                    (task_id, old_status, status, note, git_commit),
                 )
                 conn.commit()
             finally:
@@ -544,15 +560,22 @@ class TaskboardStore:
                 if not set_clauses:
                     return self._row_to_dict(task)
 
-                # If status is changing, record history
+                # If status is changing, record history and update completed_at
                 new_status = field_map["status"]
                 if new_status is not None and new_status != task["status"]:
                     conn.execute(
                         "INSERT INTO task_history "
                         "(task_id, from_status, to_status, note, git_commit) "
-                        "VALUES (?, ?, ?, 'Updated', NULL)",
-                        (task_id, task["status"], new_status),
+                        "VALUES (?, ?, ?, 'Updated', ?)",
+                        (task_id, task["status"], new_status, git_commit),
                     )
+                    # Set completed_at on done, clear on reopen
+                    if new_status == "done":
+                        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                        set_clauses.append("completed_at = ?")
+                        params.append(now)
+                    elif task["status"] == "done" and new_status != "done":
+                        set_clauses.append("completed_at = NULL")
 
                 params.append(task_id)
                 conn.execute(

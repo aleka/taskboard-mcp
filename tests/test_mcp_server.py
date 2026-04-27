@@ -102,7 +102,7 @@ class TestUpdateTaskStatus:
         assert result["status"] == "success"
         assert result["data"]["status"] == "in_progress"
         store.update_task_status.assert_called_once_with(
-            task_id="tp_001", status="in_progress", note="Working on it"
+            task_id="tp_001", status="in_progress", note="Working on it", git_commit=None
         )
 
     def test_invalid_task(self):

@@ -117,7 +117,7 @@ def delete_task(task_id: str) -> dict[str, Any]:
 
 @mcp.tool()
 def update_task_status(
-    task_id: str, status: str, note: str = ""
+    task_id: str, status: str, note: str = "", git_commit: str | None = None
 ) -> dict[str, Any]:
     """Update a task's status.
 
@@ -125,13 +125,16 @@ def update_task_status(
         task_id: The task ID (e.g. 'tp_001').
         status: New status — one of todo, in_progress, blocked, done, cancelled.
         note: Optional note explaining the change.
+        git_commit: Optional git commit hash to associate with this status change.
 
     Returns:
         The updated task dict.
     """
     try:
         store = _get_store()
-        task = store.update_task_status(task_id=task_id, status=status, note=note)
+        task = store.update_task_status(
+            task_id=task_id, status=status, note=note, git_commit=git_commit
+        )
         return {"status": "success", "data": task}
     except Exception as e:
         return {"status": "error", "message": str(e)}

@@ -249,6 +249,22 @@ class TestTaskCrud:
         with pytest.raises(ValueError, match="not found"):
             store.update_task_status("fake_001", "done")
 
+    def test_update_task_status_to_done_sets_completed_at(self, store):
+        t = store.add_task("testproj", "Complete via status")
+        assert t["completed_at"] is None
+        updated = store.update_task_status(t["task_id"], "done", note="Done!", git_commit="abc123")
+        assert updated["status"] == "done"
+        assert updated["completed_at"] is not None
+        assert updated["git_commit"] == "abc123"
+
+    def test_update_task_status_reopen_clears_completed_at(self, store):
+        t = store.add_task("testproj", "Reopen test")
+        store.update_task_status(t["task_id"], "done")
+        assert store.get_task(t["task_id"])["completed_at"] is not None
+        reopened = store.update_task_status(t["task_id"], "todo", note="Reopened")
+        assert reopened["status"] == "todo"
+        assert reopened["completed_at"] is None
+
     def test_complete_task(self, store):
         t = store.add_task("testproj", "Complete me")
         completed = store.complete_task(t["task_id"], summary="Finished!")
@@ -993,6 +1009,23 @@ class TestUpdateTask:
 
         updated = store.update_task(child["task_id"], parent_task_id=None)
         assert updated["parent_task_id"] is None
+
+    def test_update_status_to_done_sets_completed_at(self, store):
+        """Changing status to done via update_task sets completed_at."""
+        task = store.add_task("testproj", "Complete via update")
+        assert task["completed_at"] is None
+        updated = store.update_task(task["task_id"], status="done")
+        assert updated["status"] == "done"
+        assert updated["completed_at"] is not None
+
+    def test_update_status_reopen_clears_completed_at(self, store):
+        """Reopening a done task via update_task clears completed_at."""
+        task = store.add_task("testproj", "Reopen via update")
+        store.update_task(task["task_id"], status="done")
+        assert store.get_task(task["task_id"])["completed_at"] is not None
+        reopened = store.update_task(task["task_id"], status="in_progress")
+        assert reopened["status"] == "in_progress"
+        assert reopened["completed_at"] is None
 
 
 # ── get_task_history (V2-06) ────────────────────────────────────────
