@@ -39,6 +39,7 @@ def add_task(
     title: str,
     type: str = "chore",
     description: str = "",
+    tags: list[str] | None = None,
     priority: str = "medium",
 ) -> dict[str, Any]:
     """Create a new task in the taskboard.
@@ -48,6 +49,7 @@ def add_task(
         title: Task title.
         type: Task type — one of feature, bugfix, refactor, config, chore, docs, testing, infra.
         description: Optional description/notes.
+        tags: Optional list of tags for grouping (e.g. ["refactor-ui", "compliance-fix"]).
         priority: Task priority — one of low, medium, high, urgent.
 
     Returns:
@@ -60,6 +62,7 @@ def add_task(
             title=title,
             type=type,
             description=description,
+            tags=tags,
             priority=priority,
         )
         return {"status": "success", "data": task}
@@ -216,6 +219,26 @@ def list_projects() -> dict[str, Any]:
         store = _get_store()
         projects = store.list_projects()
         return {"status": "success", "data": projects}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
+@mcp.tool()
+def delete_project(name: str, force: bool = False) -> dict[str, Any]:
+    """Delete a project from the taskboard.
+
+    Args:
+        name: Project name to delete.
+        force: If True, also delete all associated tasks and their history.
+               If False (default), refuses to delete projects with tasks.
+
+    Returns:
+        Dict with deleted project name and count of tasks removed.
+    """
+    try:
+        store = _get_store()
+        result = store.delete_project(name=name, force=force)
+        return {"status": "success", "data": result}
     except Exception as e:
         return {"status": "error", "message": str(e)}
 

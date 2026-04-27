@@ -160,6 +160,57 @@ class TaskboardStore:
         finally:
             self._close(conn)
 
+    def delete_project(self, name: str, force: bool = False) -> dict[str, Any]:
+        """Delete a project by name.
+
+        Raises ``ValueError`` if the project has associated tasks and
+        ``force`` is ``False``.  Use ``force=True`` to cascade-delete
+        all associated tasks and their history first.
+        """
+        with self._write_lock:
+            conn = self._connect()
+            try:
+                project = conn.execute(
+                    "SELECT * FROM projects WHERE name = ?", (name,)
+                ).fetchone()
+                if project is None:
+                    raise ValueError(f"Project '{name}' not found")
+
+                task_count = conn.execute(
+                    "SELECT COUNT(*) FROM tasks WHERE project_name = ?", (name,)
+                ).fetchone()[0]
+
+                if task_count > 0 and not force:
+                    raise ValueError(
+                        f"Project '{name}' has {task_count} associated task(s). "
+                        f"Use force=True to delete them as well."
+                    )
+
+                if task_count > 0:
+                    task_ids = [
+                        r["task_id"]
+                        for r in conn.execute(
+                            "SELECT task_id FROM tasks WHERE project_name = ?", (name,)
+                        ).fetchall()
+                    ]
+                    for tid in task_ids:
+                        conn.execute(
+                            "DELETE FROM task_history WHERE task_id = ?", (tid,)
+                        )
+                    conn.execute(
+                        "DELETE FROM tasks WHERE project_name = ?", (name,)
+                    )
+
+                conn.execute("DELETE FROM projects WHERE name = ?", (name,))
+                conn.commit()
+            finally:
+                self._close(conn)
+
+        return {
+            "deleted": name,
+            "tasks_removed": task_count,
+        }
+
     # ── Task CRUD ────────────────────────────────────────────────────
 
     def add_task(
