@@ -559,3 +559,162 @@ class TestExportCsv:
             result = func()
 
         assert result["status"] == "error"
+
+
+# ── Error path tests — uncovered exception handlers ─────────────────
+
+
+class TestMcpServerErrorPaths:
+    """Test generic Exception handlers that return error dicts (lines 28-30, 108-109, 190-191, 242-243, 294-295)."""
+
+    def test_delete_task_generic_exception(self):
+        """delete_task: non-ValueError exception returns error (line 108-109)."""
+        func = _make_tool_func("delete_task")
+        ctx, store = _patch_store()
+        store.delete_task.side_effect = RuntimeError("Unexpected DB error")
+
+        with ctx:
+            result = func(task_id="tp_001")
+
+        assert result["status"] == "error"
+        assert "Unexpected" in result["message"]
+
+    def test_get_task_generic_exception(self):
+        """get_task: exception in get_task returns error (line 190-191)."""
+        func = _make_tool_func("get_task")
+        ctx, store = _patch_store()
+        store.get_task.side_effect = RuntimeError("DB error")
+
+        with ctx:
+            result = func(task_id="tp_001")
+
+        assert result["status"] == "error"
+        assert "DB error" in result["message"]
+
+    def test_list_projects_generic_exception(self):
+        """list_projects: exception returns error (line 242-243)."""
+        func = _make_tool_func("list_projects")
+        ctx, store = _patch_store()
+        store.list_projects.side_effect = RuntimeError("Connection refused")
+
+        with ctx:
+            result = func()
+
+        assert result["status"] == "error"
+        assert "Connection refused" in result["message"]
+
+    def test_get_metrics_generic_exception(self):
+        """get_metrics: exception returns error (line 294-295)."""
+        func = _make_tool_func("get_metrics")
+        ctx, store = _patch_store()
+        store.get_metrics.side_effect = RuntimeError("Metrics failure")
+
+        with ctx:
+            result = func()
+
+        assert result["status"] == "error"
+        assert "Metrics failure" in result["message"]
+
+    def test_add_task_generic_exception(self):
+        """add_task: non-ValueError exception returns error (line 28-30 via try/except)."""
+        func = _make_tool_func("add_task")
+        ctx, store = _patch_store()
+        store.add_task.side_effect = RuntimeError("Unexpected")
+
+        with ctx:
+            result = func(project="testproj", title="Test")
+
+        assert result["status"] == "error"
+
+    def test_complete_task_generic_exception(self):
+        """complete_task: non-ValueError exception returns error."""
+        func = _make_tool_func("complete_task")
+        ctx, store = _patch_store()
+        store.complete_task.side_effect = RuntimeError("Unexpected")
+
+        with ctx:
+            result = func(task_id="tp_001")
+
+        assert result["status"] == "error"
+
+    def test_update_task_status_generic_exception(self):
+        """update_task_status: non-ValueError exception returns error."""
+        func = _make_tool_func("update_task_status")
+        ctx, store = _patch_store()
+        store.update_task_status.side_effect = RuntimeError("Unexpected")
+
+        with ctx:
+            result = func(task_id="tp_001", status="done")
+
+        assert result["status"] == "error"
+
+    def test_list_tasks_generic_exception(self):
+        """list_tasks: exception returns error."""
+        func = _make_tool_func("list_tasks")
+        ctx, store = _patch_store()
+        store.list_tasks.side_effect = RuntimeError("Unexpected")
+
+        with ctx:
+            result = func()
+
+        assert result["status"] == "error"
+
+    def test_add_project_generic_exception(self):
+        """add_project: non-ValueError exception returns error."""
+        func = _make_tool_func("add_project")
+        ctx, store = _patch_store()
+        store.add_project.side_effect = RuntimeError("Unexpected")
+
+        with ctx:
+            result = func(name="p", display_name="P", slug="p")
+
+        assert result["status"] == "error"
+
+    def test_delete_project_generic_exception(self):
+        """delete_project: non-ValueError exception returns error."""
+        func = _make_tool_func("delete_project")
+        ctx, store = _patch_store()
+        store.delete_project.side_effect = RuntimeError("Unexpected")
+
+        with ctx:
+            result = func(name="p")
+
+        assert result["status"] == "error"
+
+    def test_get_timeline_generic_exception(self):
+        """get_timeline: exception returns error."""
+        func = _make_tool_func("get_timeline")
+        ctx, store = _patch_store()
+        store.get_timeline_week.side_effect = RuntimeError("Unexpected")
+
+        with ctx:
+            result = func(view="week")
+
+        assert result["status"] == "error"
+
+    def test_export_csv_generic_exception(self):
+        """export_csv: exception returns error."""
+        func = _make_tool_func("export_csv")
+        ctx, store = _patch_store()
+        store.export_csv.side_effect = RuntimeError("Unexpected")
+
+        with ctx:
+            result = func()
+
+        assert result["status"] == "error"
+
+    def test_get_store_lazy_init(self):
+        """_get_store lazy-initializes the singleton (lines 28-30)."""
+        import taskboard.mcp_server as mod
+
+        original = mod._store
+        mod._store = None
+        try:
+            store = mod._get_store()
+            assert store is not None
+            assert isinstance(store, mod.TaskboardStore)
+            # Second call should return the same instance
+            store2 = mod._get_store()
+            assert store is store2
+        finally:
+            mod._store = original

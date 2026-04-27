@@ -49,7 +49,7 @@ taskboard-mcp/
 │       │   └── partials.py   # HTMX fragments (GET /partials/*)
 │       ├── templates/        # Jinja2 templates
 │       └── static/           # CSS, JS, favicon
-├── tests/                    # 182 tests, 84% coverage
+├── tests/                    # 238 tests, 99% coverage
 └── docs/                     # Documentación
 ```
 
@@ -96,7 +96,7 @@ uv run pytest tests/ -vv -s
 - **SQLite in-memory**: Todos los tests usan `:memory:`, nunca tocan la DB de producción
 - **Fixtures**: `conftest.py` tiene fixtures compartidas (store in-memory, client HTTP)
 - **Naming**: `test_*.py` en `tests/`, clases `Test*`, métodos `test_*`
-- **Coverage target**: > 90% (actual: 84%)
+- **Coverage target**: > 90% (actual: 99%)
 - **Nuevas features**: Todo nuevo código debe incluir tests
 
 ### Archivos de tests

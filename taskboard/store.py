@@ -501,6 +501,14 @@ class TaskboardStore:
             "tasks_by_type": tasks_by_type,
         }
 
+    def get_timeline(
+        self, view: str = "week", project: str | None = None
+    ) -> list[dict[str, Any]]:
+        """Return timeline data for the given view ('week' or 'month')."""
+        if view == "month":
+            return self.get_timeline_month(project=project)
+        return self.get_timeline_week(project=project)
+
     def get_timeline_week(
         self, project: str | None = None
     ) -> list[dict[str, Any]]:

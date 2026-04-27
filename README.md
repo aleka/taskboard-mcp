@@ -183,7 +183,7 @@ uv run pytest tests/ -v --cov=taskboard
 uv run pytest tests/test_store.py -v
 ```
 
-182 tests, 84% coverage. Todos usan SQLite in-memory — nunca tocan la DB de producción.
+238 tests, 99% coverage. Todos usan SQLite in-memory — nunca tocan la DB de producción.
 
 ---
 

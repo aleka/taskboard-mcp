@@ -190,3 +190,103 @@ class TestCsvExportAPI:
     def test_csv_export_with_filter(self, client):
         r = client.get("/api/export/csv?project=testproj")
         assert r.status_code == 200
+
+
+class TestTasksAPIErrorPaths:
+    """Test generic Exception catch-all paths in API routes (lines 42-45, 69-70, 101-102)."""
+
+    def test_list_tasks_internal_error(self, client, monkeypatch):
+        """GET /api/tasks — generic exception returns 500 (lines 44-45)."""
+        store = client.app.state.store
+
+        def _raise(*args, **kwargs):
+            raise RuntimeError("DB locked")
+
+        monkeypatch.setattr(store, "list_tasks", _raise)
+        r = client.get("/api/tasks")
+        assert r.status_code == 500
+        assert "Internal" in r.json()["error"]
+
+    def test_list_tasks_value_error(self, client, monkeypatch):
+        """GET /api/tasks — ValueError returns 400 (line 43)."""
+        store = client.app.state.store
+
+        def _raise(*args, **kwargs):
+            raise ValueError("bad filter value")
+
+        monkeypatch.setattr(store, "list_tasks", _raise)
+        r = client.get("/api/tasks")
+        assert r.status_code == 400
+        assert "bad filter value" in r.json()["error"]
+
+    def test_create_task_internal_error(self, client, monkeypatch):
+        """POST /api/tasks — generic exception returns 500 (lines 69-70)."""
+        store = client.app.state.store
+
+        def _raise(*args, **kwargs):
+            raise RuntimeError("DB locked")
+
+        monkeypatch.setattr(store, "add_task", _raise)
+        r = client.post("/api/tasks", json={"project": "testproj", "title": "Error task"})
+        assert r.status_code == 500
+        assert "Internal" in r.json()["error"]
+
+    def test_update_task_internal_error(self, client, monkeypatch):
+        """PATCH /api/tasks/{id} — generic exception returns 500 (lines 101-102)."""
+        store = client.app.state.store
+
+        def _raise(*args, **kwargs):
+            raise RuntimeError("DB locked")
+
+        monkeypatch.setattr(store, "update_task_status", _raise)
+        r = client.patch("/api/tasks/tp_001", json={"status": "done"})
+        assert r.status_code == 500
+        assert "Internal" in r.json()["error"]
+
+
+class TestProjectsAPIErrorPaths:
+    """Test generic Exception catch-all in project routes (lines 146-147)."""
+
+    def test_create_project_internal_error(self, client, monkeypatch):
+        """POST /api/projects — generic exception returns 500 (lines 146-147)."""
+        store = client.app.state.store
+
+        def _raise(*args, **kwargs):
+            raise RuntimeError("DB locked")
+
+        monkeypatch.setattr(store, "add_project", _raise)
+        r = client.post("/api/projects", json={"name": "errproj", "slug": "ep"})
+        assert r.status_code == 500
+        assert "Internal" in r.json()["error"]
+
+
+class TestMetricsAPIErrorPath:
+    """Test generic Exception catch-all in metrics route (lines 173-174)."""
+
+    def test_metrics_internal_error(self, client, monkeypatch):
+        """GET /api/metrics — generic exception returns 500 (lines 173-174)."""
+        store = client.app.state.store
+
+        def _raise(*args, **kwargs):
+            raise RuntimeError("DB locked")
+
+        monkeypatch.setattr(store, "get_metrics", _raise)
+        r = client.get("/api/metrics")
+        assert r.status_code == 500
+        assert "Internal" in r.json()["error"]
+
+
+class TestCsvExportAPIErrorPath:
+    """Test generic Exception catch-all in CSV export route (lines 196-197)."""
+
+    def test_csv_export_internal_error(self, client, monkeypatch):
+        """GET /api/export/csv — generic exception returns 500 (lines 196-197)."""
+        store = client.app.state.store
+
+        def _raise(*args, **kwargs):
+            raise RuntimeError("DB locked")
+
+        monkeypatch.setattr(store, "export_csv", _raise)
+        r = client.get("/api/export/csv")
+        assert r.status_code == 500
+        assert "Error" in r.text

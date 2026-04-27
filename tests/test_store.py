@@ -628,3 +628,123 @@ class TestListTasksSorting:
         store.add_task("testproj", "A task")
         tasks = store.list_tasks(order_dir="SIDEWAYS")
         assert len(tasks) == 1
+
+
+# ── Connection lifecycle — non-persistent path ──────────────────────
+
+
+class TestConnectionLifecycleNonPersistent:
+    """Test the real _connect() and _close() paths (lines 63-68, 73)."""
+
+    def test_connect_sets_pragmas_on_real_db(self, tmp_path):
+        """A non-in-memory store should set WAL, busy_timeout, foreign_keys."""
+        db_file = tmp_path / "test.db"
+        from taskboard.store import TaskboardStore
+
+        s = TaskboardStore(str(db_file))
+        conn = s._connect()
+        try:
+            assert conn.execute("PRAGMA journal_mode").fetchone()[0] == "wal"
+            assert conn.execute("PRAGMA busy_timeout").fetchone()[0] == 5000
+            assert conn.execute("PRAGMA foreign_keys").fetchone()[0] == 1
+        finally:
+            conn.close()
+
+    def test_close_non_persistent_conn(self, tmp_path):
+        """_close should close non-persistent connections."""
+        db_file = tmp_path / "test_close.db"
+        from taskboard.store import TaskboardStore
+
+        s = TaskboardStore(str(db_file))
+        conn = s._connect()
+        s._close(conn)
+        # Trying to use closed conn should raise
+        import pytest as pt
+
+        with pt.raises(Exception):
+            conn.execute("SELECT 1")
+
+
+# ── Delete Project ──────────────────────────────────────────────────
+
+
+class TestDeleteProject:
+    """delete_project() — with/without force, cascade, not found (lines 170-209)."""
+
+    def test_delete_empty_project(self, store):
+        """Delete a project with no tasks."""
+        store.add_project(
+            name="emptyp", display_name="Empty", slug="ep", origin="local", path="/tmp/ep"
+        )
+        result = store.delete_project("emptyp")
+        assert result["deleted"] == "emptyp"
+        assert result["tasks_removed"] == 0
+        assert store.get_project("ep") is None
+
+    def test_delete_project_not_found(self, store):
+        with pytest.raises(ValueError, match="not found"):
+            store.delete_project("nonexistent")
+
+    def test_delete_project_with_tasks_no_force(self, store):
+        """Refuses to delete project with tasks unless force=True."""
+        store.add_task("testproj", "Blocking task")
+        with pytest.raises(ValueError, match="associated task"):
+            store.delete_project("testproj")
+
+    def test_delete_project_with_tasks_force(self, store):
+        """Force-deletes project with tasks, including history."""
+        t = store.add_task("testproj", "Doomed task")
+        store.update_task_status(t["task_id"], "in_progress")
+
+        result = store.delete_project("testproj", force=True)
+        assert result["deleted"] == "testproj"
+        assert result["tasks_removed"] == 1
+        # Task should be gone
+        assert store.get_task(t["task_id"]) is None
+        # History should be gone
+        history = store._connect().execute(
+            "SELECT COUNT(*) FROM task_history WHERE task_id = ?", (t["task_id"],)
+        ).fetchone()[0]
+        assert history == 0
+
+    def test_delete_project_cascade_multiple_tasks(self, store):
+        """Force-deletes project with multiple tasks."""
+        t1 = store.add_task("testproj", "Task 1")
+        t2 = store.add_task("testproj", "Task 2")
+        t3 = store.add_task("testproj", "Task 3")
+
+        result = store.delete_project("testproj", force=True)
+        assert result["tasks_removed"] == 3
+        assert store.get_task(t1["task_id"]) is None
+        assert store.get_task(t2["task_id"]) is None
+        assert store.get_task(t3["task_id"]) is None
+
+
+# ── Timeline ValueError in completed_at parsing (line 555-556) ──────
+
+
+class TestTimelineInvalidDate:
+    """Timeline should skip rows with unparseable completed_at (lines 555-556)."""
+
+    def test_timeline_skips_invalid_completed_at(self, store):
+        """Insert a task with invalid completed_at; timeline should not crash."""
+        store.add_task("testproj", "Valid task")
+        # Complete it normally first
+        t = store.add_task("testproj", "Another valid")
+        store.complete_task(t["task_id"])
+
+        # Insert a row with an invalid completed_at directly
+        conn = store._connect()
+        try:
+            conn.execute(
+                "INSERT INTO tasks (task_id, title, type, project_name, status, source, priority, summary, tags, description, created_at, completed_at) "
+                "VALUES (?, ?, ?, ?, 'done', 'manual', 'medium', '', '[]', '', datetime('now'), 'not-a-date')",
+                ("tp_invalid", "Bad date task", "chore", "testproj"),
+            )
+            conn.commit()
+        finally:
+            store._close(conn)
+
+        # Should not crash
+        tw = store.get_timeline_week()
+        assert isinstance(tw, list)
