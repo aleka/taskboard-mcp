@@ -96,7 +96,11 @@
                 </tr>
                 <tr>
                     <th>Completada</th>
-                    <td>{{ task.completed_at or "&mdash;" }}</td>
+                    <td>{% if task.completed_at %}{{ task.completed_at }}{% else %}<span class="empty-value">&mdash;</span>{% endif %}</td>
+                </tr>
+                <tr>
+                    <th>Tarea Padre</th>
+                    <td>{% if task.parent_task_id %}<a href="/tasks/{{ task.parent_task_id }}">{{ task.parent_task_id }}</a>{% else %}<span class="empty-value">&mdash;</span>{% endif %}</td>
                 </tr>
                 <tr>
                     <th>Git Commit</th>
@@ -115,35 +119,28 @@
                     <td>{% if task.summary %}<span class="long-text">{{ task.summary }}</span>{% else %}<span class="empty-value">&mdash;</span>{% endif %}</td>
                 </tr>
                 <tr>
-                    <th>Notas</th>
-                    <td>{% if task.notes %}<span class="long-text">{{ task.notes }}</span>{% else %}<span class="empty-value">&mdash;</span>{% endif %}</td>
+                    <th>Tags</th>
+                    <td>
+                        {% if tags and tags|length > 0 %}
+                        {% for tag in tags %}
+                        <span class="badge badge-tag">{{ tag }}</span>
+                        {% endfor %}
+                        {% else %}
+                        <span class="empty-value">&mdash;</span>
+                        {% endif %}
+                    </td>
                 </tr>
-                 <tr>
-                     <th>Tags</th>
-                     <td>
-                         {% if tags and tags|length > 0 %}
-                         {% for tag in tags %}
-                         <span class="badge badge-tag">{{ tag }}</span>
-                         {% endfor %}
-                         {% else %}
-                         <span class="empty-value">&mdash;</span>
-                         {% endif %}
-                     </td>
-                 </tr>
-                 <tr>
-                     <th>Parent</th>
-                     <td>{% if task.parent_task_id %}<a href="/tasks/{{ task.parent_task_id }}">{{ task.parent_task_id }}</a>{% else %}<span class="empty-value">&mdash;</span>{% endif %}</td>
-                 </tr>
-             </tbody>
-         </table>
-     </section>
+            </tbody>
+        </table>
+    </section>
 
      <!-- History Timeline -->
      <section class="card">
          <h2 class="card-title">Status History</h2>
          <div id="history-container"
               hx-get="/partials/task-history/{{ task.task_id }}"
-              hx-trigger="load">
+              hx-trigger="load"
+              hx-on::response-error="alert(event.detail.xhr.responseXML || event.detail.xhr.responseText)">
          </div>
      </section>
 
