@@ -90,6 +90,26 @@ def complete_task(task_id: str, summary: str = "") -> dict[str, Any]:
 
 
 @mcp.tool()
+def delete_task(task_id: str) -> dict[str, Any]:
+    """Delete a task from the taskboard.
+
+    Args:
+        task_id: The task ID (e.g. 'tp_001').
+
+    Returns:
+        Dict confirming deletion or error if task not found.
+    """
+    try:
+        store = _get_store()
+        deleted = store.delete_task(task_id=task_id)
+        if not deleted:
+            return {"status": "error", "message": f"Task '{task_id}' not found"}
+        return {"status": "success", "data": {"deleted": task_id}}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
+@mcp.tool()
 def update_task_status(
     task_id: str, status: str, note: str = ""
 ) -> dict[str, Any]:
