@@ -6,6 +6,7 @@ Run with: ``fastmcp run taskboard.mcp_server:mcp``
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 from fastmcp import FastMCP
@@ -13,6 +14,28 @@ from fastmcp import FastMCP
 from taskboard.store import TaskboardStore
 
 mcp = FastMCP("taskboard")
+
+# ── Helpers ────────────────────────────────────────────────────────
+
+
+def _normalize_tags(tags: list[str] | str | None) -> list[str] | None:
+    """Normalize tags parameter that may arrive as a JSON string.
+
+    Some MCP transports serialize list parameters as JSON strings instead
+    of native lists. This helper handles both cases transparently.
+    """
+    if tags is None:
+        return None
+    if isinstance(tags, str):
+        try:
+            parsed = json.loads(tags)
+            if isinstance(parsed, list):
+                return parsed
+        except (json.JSONDecodeError, TypeError):
+            pass  # Not valid JSON — fall through to return as-is
+        return [tags]  # Single tag as bare string
+    return tags
+
 
 # ── Lazy store singleton ──────────────────────────────────────────
 
@@ -66,7 +89,7 @@ def add_task(
             title=title,
             type=type,
             description=description,
-            tags=tags,
+            tags=_normalize_tags(tags),
             priority=priority,
             git_commit=git_commit,
             parent_task_id=parent_task_id,

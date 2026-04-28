@@ -1261,3 +1261,96 @@ class TestParentChild:
         parent = store.add_task("testproj", "Parent")
         child = store.add_task("testproj", "Child", parent_task_id=parent["task_id"])
         assert child["parent_task_id"] == parent["task_id"]
+
+
+# ── Task ID generation after deletion (Bug #2 fix) ────────────────────
+
+
+class TestTaskIdGenerationAfterDeletion:
+    """Verify that task IDs never collide after deletions.
+
+    The old implementation used COUNT(*) which would produce colliding
+    IDs when tasks were deleted. The fix uses MAX(existing sequence number).
+    """
+
+    def test_id_after_delete_task(self, store):
+        """Deleting a task should not cause the next ID to collide."""
+        t1 = store.add_task("testproj", "Task 1")  # tp_001
+        t2 = store.add_task("testproj", "Task 2")  # tp_002
+        t3 = store.add_task("testproj", "Task 3")  # tp_003
+        assert t3["task_id"] == "tp_003"
+
+        store.delete_task(t2["task_id"])  # Delete tp_002
+        t4 = store.add_task("testproj", "Task 4")
+        assert t4["task_id"] == "tp_004"  # NOT tp_003
+
+    def test_id_after_delete_last_task(self, store):
+        """Deleting the last task allows its ID to be reused safely.
+
+        Since tp_002 was deleted and tp_001 is still the max, the next
+        ID is tp_002 — which is fine because it no longer exists.
+        """
+        t1 = store.add_task("testproj", "Task 1")  # tp_001
+        t2 = store.add_task("testproj", "Task 2")  # tp_002
+
+        store.delete_task(t2["task_id"])  # Delete tp_002
+        t3 = store.add_task("testproj", "Task 3")
+        # max existing is tp_001 → next is tp_002 (tp_002 was deleted, safe to reuse)
+        assert t3["task_id"] == "tp_002"
+
+    def test_id_after_delete_middle_task(self, store):
+        """Deleting a middle task should not cause collision with existing IDs."""
+        for i in range(5):
+            store.add_task("testproj", f"Task {i}")
+        # Tasks: tp_001 to tp_005
+
+        store.delete_task("tp_003")  # Delete the middle one
+        t6 = store.add_task("testproj", "Task 6")
+        # max existing is tp_005 → next is tp_006 (tp_003 is gone, but tp_005 is max)
+        assert t6["task_id"] == "tp_006"
+
+    def test_id_after_delete_all_then_readd(self, store):
+        """Delete all tasks and re-add — starts fresh since no IDs exist."""
+        t1 = store.add_task("testproj", "Task 1")  # tp_001
+        t2 = store.add_task("testproj", "Task 2")  # tp_002
+
+        store.delete_task(t1["task_id"])
+        store.delete_task(t2["task_id"])
+
+        t3 = store.add_task("testproj", "Task 3")
+        # All tasks deleted — no existing IDs — max_seq=0, next is tp_001
+        assert t3["task_id"] == "tp_001"
+
+    def test_id_after_project_force_delete(self, store):
+        """Force-deleting a project and recreating it starts IDs fresh."""
+        store.add_task("testproj", "Task 1")  # tp_001
+        store.add_task("testproj", "Task 2")  # tp_002
+        store.add_task("testproj", "Task 3")  # tp_003
+
+        store.delete_project("testproj", force=True)
+
+        # Re-create the project
+        store.add_project(
+            name="testproj", display_name="Test", slug="tp",
+            origin="local", path="/tmp/testproj",
+        )
+
+        t1 = store.add_task("testproj", "New Task 1")
+        assert t1["task_id"] == "tp_001"  # Fresh start — no existing tasks
+
+    def test_id_across_multiple_deletions(self, store):
+        """Multiple interleaved deletes and creates never collide."""
+        tasks = []
+        for i in range(10):
+            tasks.append(store.add_task("testproj", f"Task {i}"))
+
+        # Delete every other task
+        for i in [1, 3, 5, 7]:
+            store.delete_task(tasks[i]["task_id"])
+
+        # Add new tasks — should be tp_011 through tp_014
+        for i in range(4):
+            t = store.add_task("testproj", f"New task {i}")
+            assert t["task_id"] not in [
+                tasks[j]["task_id"] for j in [0, 2, 4, 6, 8, 9]
+            ]

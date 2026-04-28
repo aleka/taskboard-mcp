@@ -140,17 +140,35 @@ class TaskboardStore:
         return dict(row)
 
     def _generate_task_id(self, conn: sqlite3.Connection, project_name: str) -> str:
-        """Return ``{slug}_{NNN}`` for the given project."""
+        """Return ``{slug}_{NNN}`` for the given project.
+
+        Uses the highest existing sequence number (not row count) so that
+        deletions don't cause ID collisions.  For example if tasks
+        ``mag_001`` through ``mag_056`` exist and ``mag_055`` is deleted,
+        the next task will be ``mag_057`` — not a colliding ``mag_056``.
+        """
         slug = conn.execute(
             "SELECT slug FROM projects WHERE name = ?", (project_name,)
         ).fetchone()
         if slug is None:
             raise ValueError(f"Project '{project_name}' not found")
         slug_str = slug[0]
-        count = conn.execute(
-            "SELECT COUNT(*) FROM tasks WHERE project_name = ?", (project_name,)
-        ).fetchone()[0]
-        return f"{slug_str}_{count + 1:03d}"
+        # Find the highest NNN among existing task IDs for this project
+        max_row = conn.execute(
+            "SELECT task_id FROM tasks WHERE project_name = ? AND task_id LIKE ?",
+            (project_name, f"{slug_str}_%"),
+        ).fetchall()
+        max_seq = 0
+        for row in max_row:
+            # Extract the numeric suffix: "mag_056" → 56
+            suffix = row[0].split("_", 1)[-1]
+            try:
+                seq = int(suffix)
+                if seq > max_seq:
+                    max_seq = seq
+            except ValueError:
+                continue
+        return f"{slug_str}_{max_seq + 1:03d}"
 
     # ── Project CRUD ─────────────────────────────────────────────────
 

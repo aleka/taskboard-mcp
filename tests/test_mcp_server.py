@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -864,3 +865,89 @@ class TestUpdateTaskMCP:
             result = func(task_id="tp_999", title="X")
 
         assert result["status"] == "error"
+
+
+# ── Tags deserialization (Bug #1 fix) ────────────────────────────────
+
+
+class TestTagsDeserialization:
+    """Verify that tags arriving as JSON strings are normalized to lists.
+
+    Some MCP transports serialize list parameters as JSON strings.
+    The _normalize_tags helper and add_task entry point handle this.
+    """
+
+    def test_tags_as_json_string(self):
+        """tags='["ccm", "field_permissions"]' should be parsed to list."""
+        func = _make_tool_func("add_task")
+        mock_task = {"task_id": "tp_001", "title": "T", "tags": '["ccm", "field_permissions"]'}
+        ctx, store = _patch_store()
+        store.add_task.return_value = mock_task
+
+        with ctx:
+            result = func(
+                project="testproj",
+                title="Test",
+                tags='["ccm", "field_permissions"]',
+            )
+
+        assert result["status"] == "success"
+        call_kwargs = store.add_task.call_args[1]
+        assert call_kwargs["tags"] == ["ccm", "field_permissions"]
+
+    def test_tags_as_native_list(self):
+        """tags=["a", "b"] should pass through unchanged."""
+        func = _make_tool_func("add_task")
+        mock_task = {"task_id": "tp_001", "title": "T", "tags": '["a", "b"]'}
+        ctx, store = _patch_store()
+        store.add_task.return_value = mock_task
+
+        with ctx:
+            result = func(project="testproj", title="Test", tags=["a", "b"])
+
+        assert result["status"] == "success"
+        call_kwargs = store.add_task.call_args[1]
+        assert call_kwargs["tags"] == ["a", "b"]
+
+    def test_tags_none(self):
+        """tags=None should pass through as None."""
+        func = _make_tool_func("add_task")
+        mock_task = {"task_id": "tp_001", "title": "T", "tags": "[]"}
+        ctx, store = _patch_store()
+        store.add_task.return_value = mock_task
+
+        with ctx:
+            result = func(project="testproj", title="Test", tags=None)
+
+        assert result["status"] == "success"
+        call_kwargs = store.add_task.call_args[1]
+        assert call_kwargs["tags"] is None
+
+    def test_tags_invalid_json_becomes_single_tag(self):
+        """tags='not-json' should become ['not-jsn'] as fallback."""
+        from taskboard.mcp_server import _normalize_tags
+        result = _normalize_tags("not-json")
+        assert result == ["not-json"]
+
+    def test_tags_empty_json_array(self):
+        """tags='[]' should be parsed to empty list."""
+        from taskboard.mcp_server import _normalize_tags
+        result = _normalize_tags("[]")
+        assert result == []
+
+    def test_tags_integration_with_real_store(self):
+        """Integration test: tags as JSON string persisted correctly."""
+        func = _make_tool_func("add_task")
+        from tests.conftest import _create_in_memory_store
+        store = _create_in_memory_store()
+        ctx = patch("taskboard.mcp_server._get_store", return_value=store)
+        with ctx:
+            result = func(
+                project="testproj",
+                title="Tags test",
+                tags='["cleanup", "dead-code"]',
+            )
+        assert result["status"] == "success"
+        tags = json.loads(result["data"]["tags"])
+        assert "cleanup" in tags
+        assert "dead-code" in tags
